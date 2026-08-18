@@ -71,7 +71,7 @@ INDIAN_STATE_CITY_HINTS = [
 
 
 SPECIAL_CHARS_PATTERN = re.compile(
-    r"[ÃÂÄÅƒÙ¢€™žœ¦§µ¶®·¸»¼½¾¿ŸþÿΓÇ~*!#$%^]"
+    r"[ÃÂÄÅƒÙ¢€™žœ¦§µ¶®·¸»¼½¾¿ŸþÿΓÇ~*!#$%^?]"
 )
 
 
