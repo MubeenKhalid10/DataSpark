@@ -49,6 +49,7 @@ INDIAN_STATE_CITY_HINTS = [
     "uttar pradesh", "west bengal", "telangana", "andhra pradesh",
 ]
 
+
 SPECIAL_CHARS_PATTERN = re.compile(
     r"[ÃÂÄÅƒÙ¢€™žœ¦§µ¶®·¸»¼½¾¿ŸþÿΓÇ~*!#$%^]"
 )
@@ -92,9 +93,12 @@ def clean_text(value):
 def is_indian_contact(row, location_col, email_col):
     location_val = str(row.get(location_col, "")).lower() if location_col else ""
     email_val = str(row.get(email_col, "")).lower() if email_col else ""
-    if any(hint in location_val for hint in INDIAN_STATE_CITY_HINTS):
-        return True
-    if email_val.endswith(".in") or ".in/" in email_val:
+    # Word-boundary match so "Indialantic" doesn't false-match "india",
+    # while still catching multi-word names like "uttar pradesh" or "new delhi".
+    for hint in INDIAN_STATE_CITY_HINTS:
+        if re.search(r"\b" + re.escape(hint) + r"\b", location_val):
+            return True
+    if email_val.endswith(".in"):
         return True
     return False
 
