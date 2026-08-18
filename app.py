@@ -105,7 +105,20 @@ def is_indian_contact(row, location_col, email_col):
 
 def load_file(file):
     if file.name.lower().endswith(".csv"):
-        return pd.read_csv(file)
+        # Raw lead exports often aren't UTF-8 (Windows-1252/Latin-1 are common
+        # from CRMs and Excel). Try a few encodings before giving up.
+        encodings_to_try = ["utf-8", "utf-8-sig", "cp1252", "latin1"]
+        last_error = None
+        for enc in encodings_to_try:
+            try:
+                file.seek(0)
+                return pd.read_csv(file, encoding=enc)
+            except (UnicodeDecodeError, UnicodeError) as e:
+                last_error = e
+                continue
+        # Last resort: decode leniently, replacing bad bytes instead of failing
+        file.seek(0)
+        return pd.read_csv(file, encoding="latin1", encoding_errors="replace")
     return pd.read_excel(file)
 
 
@@ -134,26 +147,41 @@ if raw_file is not None:
     auto_mapping = auto_map_columns(df)
 
     st.subheader("Column mapping")
-    st.write("Auto-detected mapping — adjust anything that's wrong before processing.")
+    st.write("Auto-detected mapping — adjust anything that's wrong before processing. Fields greyed out below have no matching column in this file.")
     options = ["(none)"] + list(df.columns)
     mapping = {}
     map_cols = st.columns(4)
     fields_to_map = ["Full Name", "First Name", "Last Name", "Company", "Email", "Job Title", "Industry", "Location"]
     for i, field in enumerate(fields_to_map):
         default_col = auto_mapping.get(field, "(none)")
+        field_missing = default_col == "(none)"
         default_index = options.index(default_col) if default_col in options else 0
         with map_cols[i % 4]:
-            selected = st.selectbox(field, options, index=default_index, key=f"map_{field}")
+            selected = st.selectbox(
+                field,
+                options,
+                index=default_index,
+                key=f"map_{field}",
+                disabled=field_missing,
+                help="No matching column found in this file" if field_missing else None,
+            )
         if selected != "(none)":
             mapping[field] = selected
 
     if st.button("Run cleaning pipeline", type="primary"):
+        progress_bar = st.progress(0, text="Starting cleaning pipeline...")
+        TOTAL_STEPS = 9
+
+        def update_progress(step_num, message):
+            progress_bar.progress(step_num / TOTAL_STEPS, text=f"Step {step_num}/{TOTAL_STEPS} - {message}")
+
         report = []
         work = df.copy()
         start_count = len(work)
         report.append(f"Starting rows: {start_count}")
 
         # ---- STEP 1: Standardize ----
+        update_progress(1, "Standardizing columns...")
         # Split Full Name if First/Last not directly available
         if "First Name" not in mapping and "Full Name" in mapping:
             full_col = mapping["Full Name"]
@@ -173,6 +201,7 @@ if raw_file is not None:
         report.append(f"Step 1 - Standardized columns. Fields kept: {[c for c in FINAL_COLUMNS if c in mapping]}")
 
         # ---- STEP 2: Remove blank email records ----
+        update_progress(2, "Removing blank emails...")
         before = len(std)
         std["Email"] = std["Email"].astype(str).str.strip()
         std = std[(std["Email"] != "") & (std["Email"].str.lower() != "nan")]
@@ -180,12 +209,14 @@ if raw_file is not None:
         report.append(f"Step 2 - Removed blank emails: {before - len(std)} rows removed")
 
         # ---- STEP 3: Remove Indian contacts ----
+        update_progress(3, "Removing Indian contacts...")
         before = len(std)
         indian_mask = std.apply(lambda r: is_indian_contact(r, "Location", "Email"), axis=1)
         std = std[~indian_mask].reset_index(drop=True)
         report.append(f"Step 3 - Removed Indian contacts: {before - len(std)} rows removed")
 
         # ---- STEP 4: Remove special characters & Unicode, trim ----
+        update_progress(4, "Cleaning special characters and unicode...")
         for col in FINAL_COLUMNS:
             std[col] = std[col].apply(clean_text)
         report.append("Step 4 - Cleaned special characters, hidden unicode, and extra spaces")
@@ -198,6 +229,7 @@ if raw_file is not None:
             report.append(f"Step 4b - Removed emails that became blank after cleaning: {before - len(std)} rows removed")
 
         # ---- STEP 5: Remove duplicates within file (by Email) ----
+        update_progress(5, "Removing duplicate emails...")
         before = len(std)
         std["__email_lower"] = std["Email"].str.lower()
         std = std.drop_duplicates(subset="__email_lower", keep="first")
@@ -205,6 +237,7 @@ if raw_file is not None:
         report.append(f"Step 5 - Removed in-file duplicates: {before - len(std)} rows removed")
 
         # ---- STEP 6: Remove records already in Master File(s) ----
+        update_progress(6, "Checking against Master File(s)...")
         if master_files:
             master_emails = set()
             for mf in master_files:
@@ -220,6 +253,7 @@ if raw_file is not None:
             report.append("Step 6 - No Master File uploaded, step skipped")
 
         # ---- STEP 7: Remove bounced emails ----
+        update_progress(7, "Checking against Master Bounce file...")
         if bounce_file is not None:
             bdf = load_file(bounce_file)
             b_mapping = auto_map_columns(bdf)
@@ -237,6 +271,7 @@ if raw_file is not None:
         std = std.drop(columns="__email_lower")
 
         # ---- STEP 8: Arrange final column sequence ----
+        update_progress(8, "Arranging final column order...")
         std = std[FINAL_COLUMNS]
 
         # Drop Industry/Location columns entirely if never available and fully empty
@@ -245,6 +280,7 @@ if raw_file is not None:
                 std = std.drop(columns=optional_col)
 
         # ---- STEP 9: Final quality check ----
+        update_progress(9, "Running final quality check...")
         before = len(std)
         std = std.replace("", pd.NA)
         std = std.dropna(how="all")
@@ -258,6 +294,8 @@ if raw_file is not None:
         report.append(f"Final QC - Duplicate emails remaining: {dup_check}")
         report.append(f"Final QC - Blank emails remaining: {blank_email_check}")
         report.append(f"Final row count: {len(std)} (started at {start_count})")
+
+        progress_bar.progress(1.0, text="Done! Cleaning complete.")
 
         st.session_state["cleaned_df"] = std
         st.session_state["report"] = report
