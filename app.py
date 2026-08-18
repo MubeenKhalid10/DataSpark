@@ -1,9 +1,6 @@
 """
 Lead Data Cleaning & Sorting Tool  (Raw Lead File -> Final Campaign File)
 --------------------------------------------------------------------------
-Run locally:      streamlit run app.py
-Deploy for free:  push this file (+ requirements.txt) to a GitHub repo,
-                   then deploy at https://share.streamlit.io
 
 Implements the full workflow:
 1. Standardize raw data (detect columns, split Full Name, rename, keep relevant fields)
@@ -27,18 +24,15 @@ st.set_page_config(page_title="Lead Cleaner", layout="wide")
 st.title("Lead Data Cleaning & Sorting Tool")
 st.write("Upload your raw lead file (plus optional Master File and Master Bounce File) to produce a clean, campaign-ready file.")
 
-with st.expander("ℹ️ How this works — the 9-step process", expanded=False):
+with st.expander("ℹ️ How this works ", expanded=False):
     st.markdown(
         """
-1. **Standardize** — detect your columns, split *Full Name* into First/Last if needed, keep only the relevant fields
-2. **Remove blank emails** — any row with no email address is dropped
-3. **Remove Indian contacts** — matched by location/state/city or a `.in` email domain
-4. **Clean text** — strip special characters, hidden Unicode junk, and extra spaces
-5. **Remove in-file duplicates** — same email appearing more than once in your raw file
-6. **Remove existing contacts** — anyone already in your uploaded Master File(s)
-7. **Remove bounced emails** — anyone in your Master Bounce file
-8. **Arrange columns** — final file is ordered First Name, Last Name, Company, Email, Job Title, Industry, Location
-9. **Final QC** — double-checks for blank rows, blank emails, and duplicate emails before it's ready to download
+1. Upload your raw lead file one file at a time. The tool auto-detects which columns correspond to First Name, Last Name, Company, Email, Job Title, Industry, and Location. If your file has a single Full Name column instead of separate First/Last, it will be auto-split. Only the relevant fields are kept for the final output.
+2. Upload Master File and Master Bounce File (optional). These are used to remove any contacts that have already been contacted or have bounced in the past, so you don't re-contact them.
+3. System will show preview of your raw data and detected column mapping. You can adjust the mapping if needed.
+4. Click "Run cleaning pipeline" to process the data. Progress bar will show the status of each step. The steps include:
+5. Sample of cleaned data will be shown for review, along with a processing report summarizing what happened at each step.
+6. Select your preferred download format (CSV or XLSX) and download the final cleaned campaign file.
         """
     )
 
