@@ -27,6 +27,32 @@ st.set_page_config(page_title="Lead Cleaner", layout="wide")
 st.title("Lead Data Cleaning & Sorting Tool")
 st.write("Upload your raw lead file (plus optional Master File and Master Bounce File) to produce a clean, campaign-ready file.")
 
+with st.expander("ℹ️ How this works — the 9-step process", expanded=False):
+    st.markdown(
+        """
+1. **Standardize** — detect your columns, split *Full Name* into First/Last if needed, keep only the relevant fields
+2. **Remove blank emails** — any row with no email address is dropped
+3. **Remove Indian contacts** — matched by location/state/city or a `.in` email domain
+4. **Clean text** — strip special characters, hidden Unicode junk, and extra spaces
+5. **Remove in-file duplicates** — same email appearing more than once in your raw file
+6. **Remove existing contacts** — anyone already in your uploaded Master File(s)
+7. **Remove bounced emails** — anyone in your Master Bounce file
+8. **Arrange columns** — final file is ordered First Name, Last Name, Company, Email, Job Title, Industry, Location
+9. **Final QC** — double-checks for blank rows, blank emails, and duplicate emails before it's ready to download
+        """
+    )
+
+FIELD_HELP = {
+    "Full Name": "If your file has one combined name column instead of separate First/Last, map it here — it will be auto-split.",
+    "First Name": "Contact's first name.",
+    "Last Name": "Contact's last name.",
+    "Company": "The company or organization the contact works at.",
+    "Email": "Required for every step — used to remove duplicates, existing contacts, and bounces.",
+    "Job Title": "Contact's job title, designation, or role.",
+    "Industry": "Optional. The company's industry or sector.",
+    "Location": "Optional. City, state, or country — also used to detect and remove Indian contacts.",
+}
+
 FINAL_COLUMNS = ["First Name", "Last Name", "Company", "Email", "Job Title", "Industry", "Location"]
 
 # Header synonyms used for auto-detecting columns in messy raw files
@@ -104,22 +130,33 @@ def is_indian_contact(row, location_col, email_col):
 
 
 def load_file(file):
-    if file.name.lower().endswith(".csv"):
+    """Load CSV, XLSX, or XLS based on the actual file extension, with clear errors on failure."""
+    filename = file.name.lower()
+
+    if filename.endswith(".csv"):
         # Raw lead exports often aren't UTF-8 (Windows-1252/Latin-1 are common
         # from CRMs and Excel). Try a few encodings before giving up.
         encodings_to_try = ["utf-8", "utf-8-sig", "cp1252", "latin1"]
-        last_error = None
         for enc in encodings_to_try:
             try:
                 file.seek(0)
                 return pd.read_csv(file, encoding=enc)
-            except (UnicodeDecodeError, UnicodeError) as e:
-                last_error = e
+            except (UnicodeDecodeError, UnicodeError):
                 continue
         # Last resort: decode leniently, replacing bad bytes instead of failing
         file.seek(0)
         return pd.read_csv(file, encoding="latin1", encoding_errors="replace")
-    return pd.read_excel(file)
+
+    elif filename.endswith(".xlsx"):
+        file.seek(0)
+        return pd.read_excel(file, engine="openpyxl")
+
+    elif filename.endswith(".xls"):
+        file.seek(0)
+        return pd.read_excel(file, engine="xlrd")
+
+    else:
+        raise ValueError(f"Unsupported file format: {file.name}. Please upload CSV, XLSX, or XLS.")
 
 
 def get_email_series(df, mapping):
@@ -130,24 +167,51 @@ def get_email_series(df, mapping):
 
 
 # ---------------- FILE UPLOADS ----------------
+st.subheader("Step 1 — Upload your files")
 col1, col2, col3 = st.columns(3)
 with col1:
-    raw_file = st.file_uploader("Raw lead file (required)", type=["csv", "xlsx", "xls"], key="raw")
+    raw_file = st.file_uploader(
+        "Raw lead file (required)",
+        type=["csv", "xlsx", "xls"],
+        key="raw",
+        help="The messy export you want cleaned — from a scraper, CRM, or list purchase.",
+    )
 with col2:
-    master_files = st.file_uploader("Master file(s) — past campaign contacts (optional)", type=["csv", "xlsx", "xls"], accept_multiple_files=True, key="master")
+    master_files = st.file_uploader(
+        "Master file(s) — past campaign contacts (optional)",
+        type=["csv", "xlsx", "xls"],
+        accept_multiple_files=True,
+        key="master",
+        help="Contacts from previous campaigns. Anyone whose email matches will be removed so you don't re-contact them.",
+    )
 with col3:
-    bounce_file = st.file_uploader("Master Bounce file (optional)", type=["csv", "xlsx", "xls"], key="bounce")
+    bounce_file = st.file_uploader(
+        "Master Bounce file (optional)",
+        type=["csv", "xlsx", "xls"],
+        key="bounce",
+        help="Emails that have previously bounced. Any matching address will be removed to protect your sender reputation.",
+    )
 
 if raw_file is not None:
-    df = load_file(raw_file)
-    st.subheader("Raw data preview")
-    st.dataframe(df.head(10), use_container_width=True)
-    st.caption(f"{df.shape[0]} rows x {df.shape[1]} columns")
+    try:
+        df = load_file(raw_file)
+    except Exception as e:
+        st.error(f"Could not read the uploaded raw lead file: {e}")
+        st.info("Please make sure the file is a valid CSV, XLSX, or XLS file and isn't corrupted.")
+        st.stop()
+
+    st.subheader("Step 2 — Check your raw data")
+    st.dataframe(df.head(10), width="stretch")
+    st.caption(f"{df.shape[0]} rows x {df.shape[1]} columns. Scroll right to confirm nothing looks obviously broken before you continue.")
 
     auto_mapping = auto_map_columns(df)
 
-    st.subheader("Column mapping")
-    st.write("Auto-detected mapping — adjust anything that's wrong before processing. Fields greyed out below have no matching column in this file.")
+    st.subheader("Step 3 — Confirm column mapping")
+    st.write(
+        "We auto-detected which of your file's columns correspond to each field below. "
+        "Fix anything that's wrong before processing — this determines exactly what ends up in your final file. "
+        "Fields greyed out have no matching column in this file and will be left blank."
+    )
     options = ["(none)"] + list(df.columns)
     mapping = {}
     map_cols = st.columns(4)
@@ -157,16 +221,23 @@ if raw_file is not None:
         field_missing = default_col == "(none)"
         default_index = options.index(default_col) if default_col in options else 0
         with map_cols[i % 4]:
+            help_text = "No matching column found in this file" if field_missing else FIELD_HELP.get(field)
             selected = st.selectbox(
                 field,
                 options,
                 index=default_index,
                 key=f"map_{field}",
                 disabled=field_missing,
-                help="No matching column found in this file" if field_missing else None,
+                help=help_text,
             )
         if selected != "(none)":
             mapping[field] = selected
+
+    if "Email" not in mapping:
+        st.warning("No Email column is mapped. Every row will be treated as blank-email and removed — double-check your mapping above.")
+
+    st.subheader("Step 4 — Run the pipeline")
+    st.caption("This runs all 9 cleaning steps in order and produces a campaign-ready file. Nothing is saved until you click below.")
 
     if st.button("Run cleaning pipeline", type="primary"):
         progress_bar = st.progress(0, text="Starting cleaning pipeline...")
@@ -241,7 +312,12 @@ if raw_file is not None:
         if master_files:
             master_emails = set()
             for mf in master_files:
-                mdf = load_file(mf)
+                try:
+                    mdf = load_file(mf)
+                except Exception as e:
+                    st.error(f"Could not read Master file '{mf.name}': {e}")
+                    st.info("Please make sure the file is a valid CSV, XLSX, or XLS file and isn't corrupted.")
+                    st.stop()
                 m_mapping = auto_map_columns(mdf)
                 m_email_col = m_mapping.get("Email")
                 if m_email_col:
@@ -255,7 +331,12 @@ if raw_file is not None:
         # ---- STEP 7: Remove bounced emails ----
         update_progress(7, "Checking against Master Bounce file...")
         if bounce_file is not None:
-            bdf = load_file(bounce_file)
+            try:
+                bdf = load_file(bounce_file)
+            except Exception as e:
+                st.error(f"Could not read the Bounce file: {e}")
+                st.info("Please make sure the file is a valid CSV, XLSX, or XLS file and isn't corrupted.")
+                st.stop()
             b_mapping = auto_map_columns(bdf)
             b_email_col = b_mapping.get("Email")
             if b_email_col:
@@ -301,15 +382,23 @@ if raw_file is not None:
         st.session_state["report"] = report
 
     if "cleaned_df" in st.session_state:
-        st.subheader("Processing report")
-        for line in st.session_state["report"]:
-            st.write("- " + line)
+        st.subheader("Step 5 — Review the results")
+        with st.expander("Processing report (what happened at each step)", expanded=True):
+            for line in st.session_state["report"]:
+                st.write("- " + line)
 
         st.subheader("Final cleaned data (preview)")
-        st.dataframe(st.session_state["cleaned_df"].head(50), use_container_width=True)
+        st.caption("This is what your downloaded file will contain, in final campaign order.")
+        st.dataframe(st.session_state["cleaned_df"].head(50), width="stretch")
         st.caption(f"{st.session_state['cleaned_df'].shape[0]} rows x {st.session_state['cleaned_df'].shape[1]} columns")
 
-        out_format = st.radio("Download format", ["xlsx", "csv"], horizontal=True)
+        st.subheader("Step 6 — Download")
+        out_format = st.radio(
+            "Download format",
+            ["xlsx", "csv"],
+            horizontal=True,
+            help="xlsx opens directly in Excel; csv is the safer choice for uploading into most campaign/email tools.",
+        )
         final_df = st.session_state["cleaned_df"]
         if out_format == "csv":
             data_bytes = final_df.to_csv(index=False).encode("utf-8")
@@ -323,5 +412,6 @@ if raw_file is not None:
             filename = "final_campaign_file.xlsx"
 
         st.download_button("Download final campaign file", data=data_bytes, file_name=filename, mime=mime, type="primary")
+        st.caption("This file has already passed the final quality check — no duplicate or blank emails, ready to upload into your campaign tool.")
 else:
-    st.info("Upload a raw lead file to get started.")
+    st.info("Upload a raw lead file above to get started. Master File and Bounce File are optional but recommended for cleaner results.")
