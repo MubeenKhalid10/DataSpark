@@ -15,14 +15,26 @@ Implements the full workflow:
 """
 
 import io
+import json
 import re
 import unicodedata
+from pathlib import Path
 import pandas as pd
 import streamlit as st
 
 st.set_page_config(page_title="Lead Cleaner", layout="wide")
 st.title("Lead Data Cleaning & Sorting Tool")
 st.write("Upload your raw lead file (plus optional Master File and Master Bounce File) to produce a clean, campaign-ready file.")
+st.markdown(
+    """
+    <style>
+    [data-testid="stFileUploaderDropzone"] svg {display: none;}
+    [data-testid="stFileUploaderDropzoneInstructions"] {padding-top: 0.5rem;}
+    .upload-card {border: 1px solid #E8E8E8; border-radius: 12px; padding: 0.75rem 1rem; background: #FAFAFB;}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 with st.expander("ℹ️ How this works ", expanded=False):
     st.markdown(
@@ -33,7 +45,7 @@ with st.expander("ℹ️ How this works ", expanded=False):
 4. Click "Run cleaning pipeline" to process the data. Progress bar will show the status of each step. The steps include:
 5. Sample of cleaned data will be shown for review, along with a processing report summarizing what happened at each step.
 6. Select your preferred download format (CSV or XLSX) and download the final cleaned campaign file.
-7. After processing you'll also get: a metrics summary (duplicates removed, Indian contacts removed, special characters found), a location-based split (US/UK/Canada/Australia/Other), and downloadable audit files showing exactly which rows were removed and why.
+7. After processing you'll also get: a metrics summary (duplicates removed, Indian contacts removed, special characters found), a country-based split (using data/countries.json), and downloadable audit files showing exactly which rows were removed and why.
         """
     )
  
@@ -81,56 +93,8 @@ SPECIAL_CHARS_PATTERN = re.compile(
 # specific ASCII symbols we strip. Equivalent in effect to count_special_chars() below,
 # but usable directly with pandas .str.count() for speed on large files.
 SPECIAL_CHARS_COUNT_PATTERN = re.compile(r"[^\x00-\x7F]|[~*!#$%^?]")
- 
-# Country buckets for splitting the final file by region.
-# Best-effort keyword match against the Location field / email TLD.
-COUNTRY_HINTS = {
-    "US": [
-        "usa", "united states", "u.s.a", "u.s.", " us ", "america",
-        "Alabama", "Alaska", "Arizona", "Arkansas", "California",
-        "Colorado", "Connecticut", "Delaware", "Florida", "Georgia",
-        "Hawaii", "Idaho", "Illinois", "Indiana", "Iowa", "Kansas", 
-        "Kentucky", "Louisiana", "Maine", "Maryland", "Massachusetts", 
-        "Michigan", "Minnesota", "Mississippi", "Missouri", "Montana", "miami", 
-        "Nebraska", "Nevada", "New Hampshire", "New Jersey", "New Mexico", 
-        "New York", "North Carolina", "North Dakota", "Ohio", "Oklahoma", 
-        "Oregon", "Pennsylvania", "Rhode Island", "South Carolina", "South Dakota", 
-        "Tennessee", "Texas", "Utah", "Vermont", "Virginia", "Washington", "West Virginia", 
-        "Wisconsin", "Wyoming", "los angeles", "new york city", "chicago", "houston", "phoenix", 
-        "san francisco", "philadelphia", "san antonio", "san diego", "dallas", "san jose",
-    ],
-    "UK": [
-        "united kingdom", "uk", "england", "scotland", "wales", "northern ireland", 
-        "london", "manchester", "birmingham", "glasgow", "edinburgh", "liverpool", 
-        "leeds", "bristol", "sheffield", "newcastle", "nottingham", "leicester", 
-        "southampton", "belfast", "cardiff", "coventry", "hull", "bradford", 
-        "stoke-on-trent", "wolverhampton", "plymouth", "derby", "swansea", 
-        "aberdeen", "dundee", "portsmouth", "york", "norwich", "oxford", "cambridge", 
-        "gloucester", "bath", "exeter", "canterbury", "salisbury"
-    ],
-    "Canada": [
-       "canada", "ca", "ontario", "quebec", "british columbia", "alberta", "manitoba", 
-       "saskatchewan", "nova scotia", "new brunswick", "newfoundland and labrador", 
-       "prince edward island", "northwest territories", "yukon", "nunavut", "toronto", 
-       "montreal", "vancouver", "calgary", "edmonton", "ottawa", "winnipeg", "quebec city", 
-       "hamilton", "kitchener", "halifax", "victoria", "windsor", "saskatoon", "regina", 
-       "st. john's", "kelowna", "barrie", "sherbrooke", "guelph", "kingston", "moncton", "sudbury", 
-       "charlottetown", "whitehorse", "yellowknife", "iqaluit"
-    ],
-    "Australia": [
-       "australia", "au", "new south wales", "victoria", "queensland", "western australia", 
-       "south australia", "tasmania", "australian capital territory", "northern territory", 
-       "sydney", "melbourne", "brisbane", "perth", "adelaide", "canberra", "hobart", "darwin", 
-       "gold coast", "newcastle", "central coast", "wollongong", "geelong", "townsville", 
-       "cairns", "toowoomba", "ballarat", "bendigo", "albury", "launceston", "mackay", 
-       "rockhampton", "bunbury", "bundaberg", "wagga wagga", "hervey bay", "mildura", "shepparton", 
-       "port macquarie", "gladstone", "tamworth", "orange", "dubbo", "geraldton"
-    ],
-}
-COUNTRY_PATTERNS = {
-    country: re.compile(r"\b(?:" + "|".join(re.escape(h) for h in hints) + r")\b")
-    for country, hints in COUNTRY_HINTS.items()
-}
+
+COUNTRIES_JSON_PATH = Path(__file__).parent / "data" / "countries.json"
 
  
  
@@ -180,6 +144,13 @@ def clean_text(value):
     # Remove stray leftover symbols like ~~ / ~ if any slipped through
     text = re.sub(r"~+", "", text).strip()
     return text
+
+
+def value_has_special_chars(value):
+    if pd.isna(value):
+        return False
+    text = str(value)
+    return bool(SPECIAL_CHARS_COUNT_PATTERN.search(text))
  
  
 def is_indian_contact(row, location_col, email_col, check_location=True, check_domain=True):
@@ -225,31 +196,143 @@ def find_indian_contacts(std, location_col="Location", email_col="Email", check_
     return is_match, reason, matched_value
  
  
-def get_country_bucket(location_text):
-    """Row-wise version, kept for reference/testing. The app uses the vectorized
-    classify_countries() below for performance on large files."""
-    text = str(location_text).lower()
-    if not text.strip():
+def normalize_place_text(value):
+    text = str(value).lower()
+    text = re.sub(r"[^a-z0-9]+", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+ 
+ 
+@st.cache_resource(show_spinner=False)
+def load_country_reference(json_path_str):
+    path = Path(json_path_str)
+    with path.open("r", encoding="utf-8") as f:
+        payload = json.load(f)
+
+    if not isinstance(payload, dict) or "data" not in payload:
+        raise ValueError("countries.json format is invalid. Expected top-level 'data' list.")
+
+    countries = payload["data"]
+    country_name_lookup = {}
+    city_to_countries = {}
+
+    # Common aliases that appear in lead files but differ from the canonical JSON names.
+    alias_overrides = {
+        "us": "United States",
+        "u s": "United States",
+        "usa": "United States",
+        "u s a": "United States",
+        "united states of america": "United States",
+        "uk": "United Kingdom",
+        "u k": "United Kingdom",
+        "england": "United Kingdom",
+        "scotland": "United Kingdom",
+        "wales": "United Kingdom",
+        "northern ireland": "United Kingdom",
+        "uae": "United Arab Emirates",
+        "u a e": "United Arab Emirates",
+        "south korea": "Korea South",
+        "north korea": "Korea North",
+    }
+
+    for item in countries:
+        country = str(item.get("country", "")).strip()
+        if not country:
+            continue
+
+        country_norm = normalize_place_text(country)
+        if country_norm:
+            country_name_lookup[country_norm] = country
+
+        for city in item.get("cities", []):
+            norm_city = normalize_place_text(city)
+            if norm_city:
+                city_to_countries.setdefault(norm_city, set()).add(country)
+
+    alias_lookup = {}
+    for alias_norm, canonical in alias_overrides.items():
+        canonical_norm = normalize_place_text(canonical)
+        canonical_country = country_name_lookup.get(canonical_norm)
+        if canonical_country:
+            alias_lookup[normalize_place_text(alias_norm)] = canonical_country
+
+    city_alias_overrides = {
+        "los angles": "los angeles",
+        "los angelos": "los angeles",
+        "newyork": "new york",
+        "sanfrancisco": "san francisco",
+    }
+    city_alias_lookup = {
+        normalize_place_text(k): normalize_place_text(v)
+        for k, v in city_alias_overrides.items()
+    }
+
+    return {
+        "country_name_lookup": country_name_lookup,
+        "alias_lookup": alias_lookup,
+        "city_to_countries": city_to_countries,
+        "city_alias_lookup": city_alias_lookup,
+    }
+
+
+def classify_country_from_location(location_text, country_ref):
+    text_raw = str(location_text)
+    normalized = normalize_place_text(text_raw)
+    if not normalized:
         return "Unknown"
-    for country, pattern in COUNTRY_PATTERNS.items():
-        if pattern.search(text):
+
+    country_name_lookup = country_ref["country_name_lookup"]
+    alias_lookup = country_ref["alias_lookup"]
+    city_to_countries = country_ref["city_to_countries"]
+    city_alias_lookup = country_ref["city_alias_lookup"]
+
+    # Split common location formats: "City, State, Country".
+    raw_parts = re.split(r"[,;|/\\-]+", text_raw)
+    parts = [normalize_place_text(p) for p in raw_parts if normalize_place_text(p)]
+    parts = [city_alias_lookup.get(part, part) for part in parts]
+
+    # City-based primary matching. This handles locations where country/state text
+    # is noisy or misleading, but the city is a strong indicator.
+    scores = {}
+    for part in parts:
+        matched_countries = city_to_countries.get(part)
+        if not matched_countries:
+            continue
+        weight = 3 if len(matched_countries) == 1 else 1
+        for country in matched_countries:
+            scores[country] = scores.get(country, 0) + weight
+
+    if scores:
+        ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+        top_country, top_score = ranked[0]
+        second_score = ranked[1][1] if len(ranked) > 1 else -1
+
+        # Require a clear winner when city appears in multiple countries.
+        if top_score >= second_score + 2:
+            return top_country
+
+    # Fallback: explicit country token in any part.
+    for part in parts:
+        if part in country_name_lookup:
+            return country_name_lookup[part]
+        if part in alias_lookup:
+            return alias_lookup[part]
+
+    # Next: explicit country phrase in the full string.
+    full_text = f" {normalized} "
+    for country_norm, country in country_name_lookup.items():
+        if f" {country_norm} " in full_text:
             return country
+    for alias_norm, country in alias_lookup.items():
+        if f" {alias_norm} " in full_text:
+            return country
+
     return "Other"
- 
- 
-def classify_countries(location_series):
-    """Vectorized country classification — fast on large (300k+ row) files."""
-    text = location_series.astype(str).str.lower()
-    result = pd.Series("Other", index=location_series.index)
-    is_blank = text.str.strip() == ""
-    # Apply in a fixed order so the first matching country wins for ambiguous text
-    unmatched = pd.Series(True, index=location_series.index)
-    for country, pattern in COUNTRY_PATTERNS.items():
-        match = unmatched & text.str.contains(pattern, regex=True, na=False)
-        result[match] = country
-        unmatched &= ~match
-    result[is_blank] = "Unknown"
-    return result
+
+
+def classify_countries(location_series, country_ref):
+    """Country classification with city-priority matching.
+    Uses city evidence first, then country aliases as fallback."""
+    return location_series.apply(lambda value: classify_country_from_location(value, country_ref))
  
  
 def load_file(file):
@@ -291,16 +374,17 @@ def get_email_series(df, mapping):
  
 # ---------------- FILE UPLOADS ----------------
 st.subheader("Step 1 — Upload your files")
+st.markdown('<div class="upload-card">Select files first, then click "Use selected files" to continue.</div>', unsafe_allow_html=True)
 col1, col2, col3 = st.columns(3)
 with col1:
-    raw_file = st.file_uploader(
+    raw_file_selected = st.file_uploader(
         "Raw lead file (required)",
         type=["csv", "xlsx", "xls"],
         key="raw",
         help="The messy export you want cleaned — from a scraper, CRM, or list purchase.",
     )
 with col2:
-    master_files = st.file_uploader(
+    master_files_selected = st.file_uploader(
         "Master file(s) — past campaign contacts (optional)",
         type=["csv", "xlsx", "xls"],
         accept_multiple_files=True,
@@ -308,16 +392,33 @@ with col2:
         help="Contacts from previous campaigns. Anyone whose email matches will be removed so you don't re-contact them.",
     )
 with col3:
-    bounce_file = st.file_uploader(
+    bounce_file_selected = st.file_uploader(
         "Master Bounce file (optional)",
         type=["csv", "xlsx", "xls"],
         key="bounce",
         help="Emails that have previously bounced. Any matching address will be removed to protect your sender reputation.",
     )
+
+if st.button("Use selected files", type="secondary"):
+    st.session_state["active_raw_file"] = raw_file_selected
+    st.session_state["active_master_files"] = master_files_selected
+    st.session_state["active_bounce_file"] = bounce_file_selected
+
+active_raw_file = st.session_state.get("active_raw_file")
+active_master_files = st.session_state.get("active_master_files", [])
+active_bounce_file = st.session_state.get("active_bounce_file")
+
+if active_raw_file is not None:
+    st.success(f"Using raw file: {active_raw_file.name}")
+if active_master_files:
+    st.caption("Using master files: " + ", ".join(f.name for f in active_master_files))
+if active_bounce_file is not None:
+    st.caption(f"Using bounce file: {active_bounce_file.name}")
  
-if raw_file is not None:
+if active_raw_file is not None:
     try:
-        df = load_file(raw_file)
+        with st.spinner("Loading raw lead file..."):
+            df = load_file(active_raw_file)
     except Exception as e:
         st.error(f"Could not read the uploaded raw lead file: {e}")
         st.info("Please make sure the file is a valid CSV, XLSX, or XLS file and isn't corrupted.")
@@ -431,40 +532,53 @@ if raw_file is not None:
         std = std[~indian_mask].reset_index(drop=True)
         report.append(f"Step 3 - Removed Indian contacts: {before - len(std)} rows removed")
  
-        # ---- STEP 4: Remove special characters & Unicode, trim ----
-        update_progress(4, "Cleaning special characters and unicode...")
-        # Count special characters BEFORE cleaning, so we can report exactly how much was found
-        # (vectorized for speed on large files)
+        # ---- STEP 4: Separate special characters + clean non-email text ----
+        update_progress(4, "Separating special-character rows and cleaning text fields...")
         email_special_char_counts = std["Email"].astype(str).str.count(SPECIAL_CHARS_COUNT_PATTERN)
         total_special_chars_email = int(email_special_char_counts.sum())
         rows_with_special_chars_email = int((email_special_char_counts > 0).sum())
- 
-        # Track which rows had ANY field changed by cleaning (for the audit file + row count)
-        before_snapshot = std.copy()
+
+        # Build row-level flags by field so removed records are fully auditable.
+        field_masks = {}
         for col in FINAL_COLUMNS:
-            std[col] = std[col].apply(clean_text)
- 
-        changed_mask = pd.Series(False, index=std.index)
+            series = std[col] if col in std.columns else pd.Series([""] * len(std), index=std.index)
+            field_masks[col] = series.astype(str).str.contains(SPECIAL_CHARS_COUNT_PATTERN, regex=True, na=False)
+
+        any_special_mask = pd.Series(False, index=std.index)
         for col in FINAL_COLUMNS:
-            changed_mask = changed_mask | (before_snapshot[col].astype(str) != std[col].astype(str))
-        special_chars_audit_df = before_snapshot[changed_mask].copy()
-        special_chars_audit_df["Cleaned Email"] = std.loc[changed_mask, "Email"]
-        st.session_state["special_chars_audit_df"] = special_chars_audit_df
-        rows_cleaned_count = int(changed_mask.sum())
- 
-        report.append(
-            f"Step 4 - Cleaned special characters, hidden unicode, and extra spaces: "
-            f"{rows_cleaned_count} rows changed "
-            f"({rows_with_special_chars_email} emails had special characters, "
-            f"{total_special_chars_email} special characters found in Email field total)"
+            any_special_mask = any_special_mask | field_masks[col]
+
+        email_special_mask = field_masks["Email"]
+        removed_special_df = std[any_special_mask].copy()
+        removed_special_df["Matched Fields"] = removed_special_df.apply(
+            lambda row: ", ".join([c for c in FINAL_COLUMNS if field_masks[c].get(row.name, False)]),
+            axis=1,
         )
- 
-        # Re-check blank emails after cleaning (in case cleaning emptied any)
+        st.session_state["special_chars_removed_df"] = removed_special_df
+        st.session_state["special_chars_email_df"] = std[email_special_mask].copy()
+
         before = len(std)
-        std = std[(std["Email"] != "") & (std["Email"].str.lower() != "nan")]
-        std = std.reset_index(drop=True)
-        if before - len(std) > 0:
-            report.append(f"Step 4b - Removed emails that became blank after cleaning: {before - len(std)} rows removed")
+        std = std[~any_special_mask].reset_index(drop=True)
+
+        # Clean non-email text only in the remaining campaign rows.
+        rows_changed_after_clean = 0
+        before_snapshot = std.copy()
+        cleanable_columns = [c for c in FINAL_COLUMNS if c != "Email"]
+        for col in cleanable_columns:
+            std[col] = std[col].apply(clean_text)
+
+        if len(std) > 0:
+            changed_mask = pd.Series(False, index=std.index)
+            for col in cleanable_columns:
+                changed_mask = changed_mask | (before_snapshot[col].astype(str) != std[col].astype(str))
+            rows_changed_after_clean = int(changed_mask.sum())
+
+        report.append(
+            f"Step 4 - Separated special-character rows into audit file: {before - len(std)} rows removed from final output "
+            f"({rows_with_special_chars_email} emails had special characters, "
+            f"{total_special_chars_email} special characters found in Email field total). "
+            f"Then cleaned non-email text fields in remaining rows: {rows_changed_after_clean} rows changed"
+        )
  
         # ---- STEP 5: Remove duplicates within file (by Email) ----
         update_progress(5, "Removing duplicate emails...")
@@ -477,11 +591,12 @@ if raw_file is not None:
  
         # ---- STEP 6: Remove records already in Master File(s) ----
         update_progress(6, "Checking against Master File(s)...")
-        if master_files:
+        if active_master_files:
             master_emails = set()
-            for mf in master_files:
+            for mf in active_master_files:
                 try:
-                    mdf = load_file(mf)
+                    with st.spinner(f"Reading Master file {mf.name}..."):
+                        mdf = load_file(mf)
                 except Exception as e:
                     st.error(f"Could not read Master file '{mf.name}': {e}")
                     st.info("Please make sure the file is a valid CSV, XLSX, or XLS file and isn't corrupted.")
@@ -498,9 +613,10 @@ if raw_file is not None:
  
         # ---- STEP 7: Remove bounced emails ----
         update_progress(7, "Checking against Master Bounce file...")
-        if bounce_file is not None:
+        if active_bounce_file is not None:
             try:
-                bdf = load_file(bounce_file)
+                with st.spinner(f"Reading Bounce file {active_bounce_file.name}..."):
+                    bdf = load_file(active_bounce_file)
             except Exception as e:
                 st.error(f"Could not read the Bounce file: {e}")
                 st.info("Please make sure the file is a valid CSV, XLSX, or XLS file and isn't corrupted.")
@@ -545,7 +661,16 @@ if raw_file is not None:
         report.append(f"Final row count: {len(std)} (started at {start_count})")
  
         # ---- Country split (for download) ----
-        std["__country"] = classify_countries(std["Location"]) if "Location" in std.columns else "Unknown"
+        if "Location" in std.columns:
+            try:
+                with st.spinner("Loading country and city library..."):
+                    country_ref = load_country_reference(str(COUNTRIES_JSON_PATH))
+                std["__country"] = classify_countries(std["Location"], country_ref)
+            except Exception as e:
+                st.warning(f"Country split fallback: could not parse countries.json ({e}). All rows marked as Unknown.")
+                std["__country"] = "Unknown"
+        else:
+            std["__country"] = "Unknown"
  
         progress_bar.progress(1.0, text="Done! Cleaning complete.")
  
@@ -558,7 +683,7 @@ if raw_file is not None:
         st.session_state["metrics"] = {
             "indian_removed": len(st.session_state.get("removed_indian_df", [])),
             "duplicates_removed": duplicate_count,
-            "special_char_rows": rows_cleaned_count,
+            "special_char_rows": len(st.session_state.get("special_chars_removed_df", [])),
             "special_char_total": total_special_chars_email,
             "special_char_emails": rows_with_special_chars_email,
         }
@@ -571,7 +696,7 @@ if raw_file is not None:
         m1.metric("Duplicate emails removed", metrics.get("duplicates_removed", 0))
         m2.metric("Indian contacts removed", metrics.get("indian_removed", 0))
         m3.metric("Emails with special characters", metrics.get("special_char_emails", 0))
-        m4.metric("Special characters found (Email field)", metrics.get("special_char_total", 0))
+        m4.metric("Rows separated due to special characters", metrics.get("special_char_rows", 0))
  
         with st.expander("Processing report (what happened at each step)", expanded=True):
             for line in st.session_state["report"]:
@@ -584,7 +709,7 @@ if raw_file is not None:
  
         st.subheader("Step 6 — Download")
  
-        tab_main, tab_country, tab_audit = st.tabs(["Final campaign file", "Split by location", "Audit files (removed rows)"])
+        tab_main, tab_country, tab_audit = st.tabs(["Final campaign file", "Split by country", "Audit files (removed rows)"])
  
         with tab_main:
             out_format = st.radio(
@@ -611,8 +736,8 @@ if raw_file is not None:
  
         with tab_country:
             st.caption(
-                "Best-effort split based on the Location field (city/state/country name matching). "
-                "'Other' means a location was present but didn't match a known country; 'Unknown' means Location was blank."
+                "Split based on [data/countries.json](data/countries.json) country and city matching against Location. "
+                "'Other' means a location was present but no country/city keyword matched; 'Unknown' means Location was blank."
             )
             country_split = st.session_state.get("country_split", {})
             if not country_split or set(country_split.keys()) == {"Unknown"}:
@@ -652,18 +777,32 @@ if raw_file is not None:
  
             st.divider()
  
-            special_chars_df = st.session_state.get("special_chars_audit_df", pd.DataFrame())
-            st.write(f"**Rows with special characters found (now cleaned, kept in final file):** {len(special_chars_df)} rows")
+            special_chars_df = st.session_state.get("special_chars_removed_df", pd.DataFrame())
+            st.write(f"**Rows separated because special characters were found (uncleaned raw values):** {len(special_chars_df)} rows")
             if len(special_chars_df) > 0:
                 st.dataframe(special_chars_df.head(20), width="stretch")
                 st.download_button(
-                    "Download special-characters audit (full list)",
+                    "Download separated special-characters file (full list)",
                     data=special_chars_df.to_csv(index=False).encode("utf-8"),
-                    file_name="special_characters_found.csv",
+                    file_name="special_characters_separated.csv",
                     mime="text/csv",
                     key="dl_specialchars_audit",
                 )
-                st.caption("Shows the original (uncleaned) values next to the cleaned Email, so you can verify nothing important was stripped out.")
+                st.caption("This file is not cleaned. It contains original rows exactly as detected with special characters.")
+
+            st.divider()
+
+            email_special_df = st.session_state.get("special_chars_email_df", pd.DataFrame())
+            st.write(f"**Rows where Email specifically contains special characters (uncleaned):** {len(email_special_df)} rows")
+            if len(email_special_df) > 0:
+                st.dataframe(email_special_df.head(20), width="stretch")
+                st.download_button(
+                    "Download email-special-characters file (full list)",
+                    data=email_special_df.to_csv(index=False).encode("utf-8"),
+                    file_name="email_special_characters_separated.csv",
+                    mime="text/csv",
+                    key="dl_email_specialchars_audit",
+                )
 else:
-    st.info("Upload a raw lead file above to get started. Master File and Bounce File are optional but recommended for cleaner results.")
+    st.info("Select files above, click 'Use selected files', then continue. Master File and Bounce File are optional but recommended for cleaner results.")
  
