@@ -275,6 +275,14 @@ def load_country_reference(json_path_str):
 
 
 def classify_country_from_location(location_text, country_ref):
+    """Classify country from a free-form Location cell.
+
+    Updated behaviour: prefer explicit state/country tokens first (exact country
+    or alias matches). Only if no country/state is found do we fall back to
+    city-based matching. This follows the requirement: "first look for
+    state/country in location column, and if state/country name is not given
+    then look for city name and classify/sort the email".
+    """
     text_raw = str(location_text)
     normalized = normalize_place_text(text_raw)
     if not normalized:
@@ -290,11 +298,36 @@ def classify_country_from_location(location_text, country_ref):
     parts = [normalize_place_text(p) for p in raw_parts if normalize_place_text(p)]
     parts = [city_alias_lookup.get(part, part) for part in parts]
 
-    # City-based primary matching. This handles locations where country/state text
-    # is noisy or misleading, but the city is a strong indicator.
+    # 1) Prefer explicit country/state tokens in the parts (exact match or alias).
+    for part in parts:
+        if part in country_name_lookup:
+            return country_name_lookup[part]
+        if part in alias_lookup:
+            return alias_lookup[part]
+
+    # 2) Also check the full normalized text for a country phrase (handles
+    #    cases like "State of X" or "Somewhere, United States").
+    full_text = f" {normalized} "
+    for country_norm, country in country_name_lookup.items():
+        if f" {country_norm} " in full_text:
+            return country
+    for alias_norm, country in alias_lookup.items():
+        if f" {alias_norm} " in full_text:
+            return country
+
+    # 3) Fallback: city-based matching if no explicit country/state token found.
     scores = {}
+    # Fast path: try exact city matches first, then attempt substring matching
     for part in parts:
         matched_countries = city_to_countries.get(part)
+        if not matched_countries:
+            # Try to match known city keys that appear inside the part (e.g.,
+            # "san francisco bay area" should match "san francisco"). This is
+            # slightly more expensive but only runs when exact match fails.
+            for city_key, countries_set in city_to_countries.items():
+                if city_key in part:
+                    matched_countries = countries_set
+                    break
         if not matched_countries:
             continue
         weight = 3 if len(matched_countries) == 1 else 1
@@ -310,21 +343,8 @@ def classify_country_from_location(location_text, country_ref):
         if top_score >= second_score + 2:
             return top_country
 
-    # Fallback: explicit country token in any part.
-    for part in parts:
-        if part in country_name_lookup:
-            return country_name_lookup[part]
-        if part in alias_lookup:
-            return alias_lookup[part]
-
-    # Next: explicit country phrase in the full string.
-    full_text = f" {normalized} "
-    for country_norm, country in country_name_lookup.items():
-        if f" {country_norm} " in full_text:
-            return country
-    for alias_norm, country in alias_lookup.items():
-        if f" {alias_norm} " in full_text:
-            return country
+        # If there is a tie-ish result, still return the top_country as a best guess.
+        return top_country
 
     return "Other"
 
@@ -336,33 +356,55 @@ def classify_countries(location_series, country_ref):
  
  
 def load_file(file):
-    """Load CSV, XLSX, or XLS based on the actual file extension, with clear errors on failure."""
+    """Load CSV, XLSX, or XLS based on the actual file extension, with clear errors on failure.
+
+    This function tries a few encodings for CSV. If a MemoryError occurs (very large files),
+    it falls back to a streaming/chunked read for CSV to avoid crashing the app.
+    """
     filename = file.name.lower()
- 
-    if filename.endswith(".csv"):
-        # Raw lead exports often aren't UTF-8 (Windows-1252/Latin-1 are common
-        # from CRMs and Excel). Try a few encodings before giving up.
-        encodings_to_try = ["utf-8", "utf-8-sig", "cp1252", "latin1"]
-        for enc in encodings_to_try:
+
+    try:
+        if filename.endswith(".csv"):
+            # Raw lead exports often aren't UTF-8. Try a few encodings before giving up.
+            encodings_to_try = ["utf-8", "utf-8-sig", "cp1252", "latin1"]
+            for enc in encodings_to_try:
+                try:
+                    file.seek(0)
+                    return pd.read_csv(file, encoding=enc)
+                except (UnicodeDecodeError, UnicodeError):
+                    continue
+            # Last resort: decode leniently, replacing bad bytes instead of failing
+            file.seek(0)
+            return pd.read_csv(file, encoding="latin1", encoding_errors="replace")
+
+        elif filename.endswith(".xlsx"):
+            file.seek(0)
+            return pd.read_excel(file, engine="openpyxl")
+
+        elif filename.endswith(".xls"):
+            file.seek(0)
+            return pd.read_excel(file, engine="xlrd")
+
+        else:
+            raise ValueError(f"Unsupported file format: {file.name}. Please upload CSV, XLSX, or XLS.")
+    except MemoryError:
+        # Fallback for very large CSV files: stream in chunks and concatenate while
+        # forcing strings to reduce memory pressure. This avoids crashing the app.
+        if filename.endswith(".csv"):
             try:
                 file.seek(0)
-                return pd.read_csv(file, encoding=enc)
-            except (UnicodeDecodeError, UnicodeError):
-                continue
-        # Last resort: decode leniently, replacing bad bytes instead of failing
-        file.seek(0)
-        return pd.read_csv(file, encoding="latin1", encoding_errors="replace")
- 
-    elif filename.endswith(".xlsx"):
-        file.seek(0)
-        return pd.read_excel(file, engine="openpyxl")
- 
-    elif filename.endswith(".xls"):
-        file.seek(0)
-        return pd.read_excel(file, engine="xlrd")
- 
-    else:
-        raise ValueError(f"Unsupported file format: {file.name}. Please upload CSV, XLSX, or XLS.")
+                chunks = []
+                for chunk in pd.read_csv(file, encoding="latin1", encoding_errors="replace", chunksize=100_000, dtype=str):
+                    chunks.append(chunk)
+                if not chunks:
+                    return pd.DataFrame()
+                return pd.concat(chunks, ignore_index=True)
+            except Exception as e:
+                raise ValueError(f"Could not read large CSV file in streaming mode: {e}")
+        raise
+    except Exception as e:
+        # Re-raise as ValueError to have consistent user-facing messages
+        raise ValueError(f"Could not read file '{file.name}': {e}")
  
  
 def get_email_series(df, mapping):
@@ -480,14 +522,15 @@ if active_raw_file is not None:
     st.caption("This runs all 9 cleaning steps in order and produces a campaign-ready file. Nothing is saved until you click below.")
  
     if st.button("Run cleaning pipeline", type="primary"):
-        progress_bar = st.progress(0, text="Starting cleaning pipeline...")
-        TOTAL_STEPS = 9
- 
-        def update_progress(step_num, message):
-            progress_bar.progress(step_num / TOTAL_STEPS, text=f"Step {step_num}/{TOTAL_STEPS} - {message}")
- 
-        report = []
-        work = df.copy()
+        with st.spinner("Processing — this can take a while for large files..."):
+            progress_bar = st.progress(0, text="Starting cleaning pipeline...")
+            TOTAL_STEPS = 9
+
+            def update_progress(step_num, message):
+                progress_bar.progress(step_num / TOTAL_STEPS, text=f"Step {step_num}/{TOTAL_STEPS} - {message}")
+
+            report = []
+            work = df.copy()
         start_count = len(work)
         report.append(f"Starting rows: {start_count}")
  
