@@ -30,7 +30,128 @@ st.markdown(
     <style>
     [data-testid="stFileUploaderDropzone"] svg {display: none;}
     [data-testid="stFileUploaderDropzoneInstructions"] {padding-top: 0.5rem;}
+    [data-testid="stColumn"]:first-child [data-testid="stFileUploaderDropzone"] button[aria-label*="Upload"],
+    [data-testid="stColumn"]:last-child [data-testid="stFileUploaderDropzone"] button[aria-label*="Upload"],
+    [data-testid="stColumn"]:first-child [data-testid="stFileUploaderFile"] button[aria-label*="Add"],
+    [data-testid="stColumn"]:first-child [data-testid="stFileUploaderFile"] button[aria-label*="Upload"],
+    [data-testid="stColumn"]:first-child [data-testid="stFileUploaderFile"] button[title*="Add"],
+    [data-testid="stColumn"]:last-child [data-testid="stFileUploaderFile"] button[aria-label*="Add"],
+    [data-testid="stColumn"]:last-child [data-testid="stFileUploaderFile"] button[aria-label*="Upload"],
+    [data-testid="stColumn"]:last-child [data-testid="stFileUploaderFile"] button[title*="Add"],
+    [data-testid="stColumn"]:first-child button[data-testid*="Add"],
+    [data-testid="stColumn"]:last-child button[data-testid*="Add"],
+    [data-testid="stColumn"]:first-child button[data-testid="stBaseButton-borderlessIcon"],
+    [data-testid="stColumn"]:last-child button[data-testid="stBaseButton-borderlessIcon"] {display: none;}
+    [data-testid="stColumn"] {position: relative;}
+    [data-testid="stColumn"] [class*="st-key-remove_"],
+    [data-testid="stColumn"] .stElementContainer:has([data-testid="stButton"]) {
+        position: absolute;
+        top: 2.5rem;
+        right: 0.55rem;
+        z-index: 20;
+        width: auto !important;
+        height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    [data-testid="stColumn"] [class*="st-key-remove_"] button,
+    [data-testid="stColumn"] .stElementContainer:has([data-testid="stButton"]) button {
+        min-width: 1.75rem !important;
+        width: 1.75rem !important;
+        height: 1.75rem !important;
+        padding: 0 !important;
+        border: 0 !important;
+        border-radius: 50% !important;
+        background: transparent !important;
+        color: #4B5563 !important;
+        font-size: 1.15rem !important;
+        line-height: 1 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        box-shadow: none !important;
+        cursor: pointer;
+        transition: all 0.15s ease-in-out;
+    }
+    [data-testid="stColumn"] [class*="st-key-remove_"] button:hover,
+    [data-testid="stColumn"] .stElementContainer:has([data-testid="stButton"]) button:hover {
+        color: #B42318 !important;
+        background: #FEE4E2 !important;
+    }
+    [data-testid="stColumn"] [class*="st-key-remove_"] button p,
+    [data-testid="stColumn"] .stElementContainer:has([data-testid="stButton"]) button p {
+        margin: 0 !important;
+        padding: 0 !important;
+        font-size: 1.15rem !important;
+        line-height: 1 !important;
+    }
     .upload-card {border: 1px solid #E8E8E8; border-radius: 12px; padding: 0.75rem 1rem; background: #FAFAFB;}
+    
+    /* Global Loading Overlay & Interaction Blocker */
+    @keyframes global-spinner-spin {
+        0% { transform: translate(-50%, -50%) rotate(0deg); }
+        100% { transform: translate(-50%, -50%) rotate(360deg); }
+    }
+
+    [data-testid="stApp"][data-test-script-state="running"]::before {
+        content: "";
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(15, 23, 42, 0.45);
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+        z-index: 999990;
+        pointer-events: all !important;
+        cursor: wait !important;
+    }
+
+    [data-testid="stApp"][data-test-script-state="running"]::after {
+        content: "";
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 58px;
+        height: 58px;
+        border: 4px solid rgba(255, 255, 255, 0.2);
+        border-top: 4px solid #3B82F6;
+        border-right: 4px solid #60A5FA;
+        border-radius: 50%;
+        z-index: 999999;
+        animation: global-spinner-spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+        pointer-events: none !important;
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+    }
+
+    [data-testid="stApp"][data-test-script-state="running"] button,
+    [data-testid="stApp"][data-test-script-state="running"] input,
+    [data-testid="stApp"][data-test-script-state="running"] select,
+    [data-testid="stApp"][data-test-script-state="running"] [role="button"],
+    [data-testid="stApp"][data-test-script-state="running"] [data-testid="stFileUploader"],
+    [data-testid="stApp"][data-test-script-state="running"] [data-testid="stCheckbox"],
+    [data-testid="stApp"][data-test-script-state="running"] [data-baseweb="select"] {
+        pointer-events: none !important;
+        cursor: wait !important;
+    }
+
+    [data-stale="true"] {
+        pointer-events: none !important;
+        opacity: 0.7;
+        transition: opacity 0.2s ease-in-out;
+    }
+
+    [data-testid="stSpinner"] {
+        padding: 0.65rem 1rem;
+        background: #F8FAFC;
+        border: 1px solid #E2E8F0;
+        border-radius: 10px;
+        margin: 0.5rem 0;
+        font-weight: 500;
+        color: #1E293B;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -417,45 +538,72 @@ def get_email_series(df, mapping):
 # ---------------- FILE UPLOADS ----------------
 st.subheader("Step 1 — Upload your files")
 st.markdown('<div class="upload-card">Select files first, then click "Use selected files" to continue.</div>', unsafe_allow_html=True)
+for uploader_name in ["raw", "master", "bounce"]:
+    st.session_state.setdefault(f"{uploader_name}_uploader_version", 0)
+
 col1, col2, col3 = st.columns(3)
 with col1:
     raw_file_selected = st.file_uploader(
         "Raw lead file (required)",
         type=["csv", "xlsx", "xls"],
-        key="raw",
+        key=f"raw_{st.session_state['raw_uploader_version']}",
         help="The messy export you want cleaned — from a scraper, CRM, or list purchase.",
     )
+    if raw_file_selected is not None and st.button("✕", key="remove_raw_file", help="Remove selected raw file"):
+        st.session_state["active_raw_file"] = None
+        st.session_state["raw_uploader_version"] += 1
+        st.rerun()
 with col2:
     master_files_selected = st.file_uploader(
-        "Master file(s) — past campaign contacts (optional)",
+        "Master file(s) — up to 3 files (optional)",
         type=["csv", "xlsx", "xls"],
         accept_multiple_files=True,
-        key="master",
-        help="Contacts from previous campaigns. Anyone whose email matches will be removed so you don't re-contact them.",
+        key=f"master_{st.session_state['master_uploader_version']}",
+        help="Upload up to three past campaign contact files. Anyone whose email matches will be removed so you don't re-contact them.",
     )
+    if master_files_selected and st.button("✕", key="remove_master_files", help="Remove all selected Master files"):
+        st.session_state["active_master_files"] = []
+        st.session_state["master_uploader_version"] += 1
+        st.rerun()
 with col3:
     bounce_file_selected = st.file_uploader(
         "Master Bounce file (optional)",
         type=["csv", "xlsx", "xls"],
-        key="bounce",
+        key=f"bounce_{st.session_state['bounce_uploader_version']}",
         help="Emails that have previously bounced. Any matching address will be removed to protect your sender reputation.",
     )
+    if bounce_file_selected is not None and st.button("✕", key="remove_bounce_file", help="Remove selected bounce file"):
+        st.session_state["active_bounce_file"] = None
+        st.session_state["bounce_uploader_version"] += 1
+        st.rerun()
 
 if st.button("Use selected files", type="secondary"):
+    if len(master_files_selected) > 3:
+        st.error("Please select no more than 3 Master files.")
+        st.session_state["active_master_files"] = []
+    else:
+        st.session_state["active_master_files"] = master_files_selected
     st.session_state["active_raw_file"] = raw_file_selected
-    st.session_state["active_master_files"] = master_files_selected
     st.session_state["active_bounce_file"] = bounce_file_selected
 
 active_raw_file = st.session_state.get("active_raw_file")
 active_master_files = st.session_state.get("active_master_files", [])
 active_bounce_file = st.session_state.get("active_bounce_file")
 
-if active_raw_file is not None:
-    st.success(f"Using raw file: {active_raw_file.name}")
-if active_master_files:
-    st.caption("Using master files: " + ", ".join(f.name for f in active_master_files))
-if active_bounce_file is not None:
-    st.caption(f"Using bounce file: {active_bounce_file.name}")
+status_col1, status_col2, status_col3 = st.columns(3)
+with status_col1:
+    raw_status_file = active_raw_file or raw_file_selected
+    if raw_status_file is not None:
+        st.success(f"Using raw file: {raw_status_file.name}")
+with status_col2:
+    if active_master_files:
+        st.caption("Using master files: " + ", ".join(f.name for f in active_master_files))
+    elif master_files_selected:
+        st.caption(f"{len(master_files_selected)} Master file(s) selected")
+with status_col3:
+    bounce_status_file = active_bounce_file or bounce_file_selected
+    if bounce_status_file is not None:
+        st.caption(f"Using bounce file: {bounce_status_file.name}")
  
 if active_raw_file is not None:
     try:
