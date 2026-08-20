@@ -487,8 +487,7 @@ def classify_countries(location_series, country_ref):
     return classify_countries_fast(location_series, country_ref)
 
 
-@st.cache_data(show_spinner=False, max_entries=5)
-def load_file(file):
+def load_file_internal(file):
     """Load CSV, XLSX, XLS, or ZIP/GZ archives with memory-efficient parsing."""
     filename = file.name.lower()
 
@@ -554,6 +553,16 @@ def load_file(file):
         raise ValueError(f"Could not read file '{file.name}': {e}")
 
 
+def load_file(file):
+    """Zero-overhead cached loader using file identity to prevent memory hashing spikes."""
+    if file is None:
+        return None
+    cache_key = f"_df_cache_{getattr(file, 'name', '')}_{getattr(file, 'size', 0)}"
+    if cache_key not in st.session_state:
+        st.session_state[cache_key] = load_file_internal(file)
+    return st.session_state[cache_key]
+
+
 def get_email_series(df, mapping):
     email_col = mapping.get("Email")
     if email_col and email_col in df.columns:
@@ -564,7 +573,14 @@ def get_email_series(df, mapping):
 # ---------------- FILE UPLOADS ----------------
 st.subheader("Step 1 — Upload your files")
 st.markdown('<div class="upload-card">Select files first, then click "Use selected files" to continue.</div>', unsafe_allow_html=True)
-st.caption("⚡ **Tip for fast upload on large files (500k+ rows):** Uploading a **.zip** or **.gz** archive reduces upload size by ~90% (e.g. from 150MB to 15MB) for instant upload over internet.")
+
+st.info(
+    "💡 **Important for 500k+ Rows on Cloud:**\n\n"
+    "Cloud hosts (Streamlit Cloud, AWS, Cloudflare) enforce a **60–90 second network timeout** per upload request. "
+    "Uploading an uncompressed 100MB+ CSV over standard broadband takes 3–5 minutes and triggers a timeout (`ClientDisconnect`).\n\n"
+    "👉 **Recommended:** Right-click your CSV and choose **Send to → Compressed (zipped) folder** (or `.csv.gz`). "
+    "This reduces file size by **90%** (e.g. from 150MB down to ~15MB), uploading in **under 15 seconds** with zero timeouts!"
+)
 
 for uploader_name in ["raw", "master", "bounce"]:
     st.session_state.setdefault(f"{uploader_name}_uploader_version", 0)
@@ -579,6 +595,10 @@ with col1:
     )
     if raw_file_selected is not None and st.button("✕", key="remove_raw_file", help="Remove selected raw file"):
         st.session_state["active_raw_file"] = None
+        for k in list(st.session_state.keys()):
+            if k.startswith("_df_cache_"):
+                del st.session_state[k]
+        gc.collect()
         st.session_state["raw_uploader_version"] += 1
         st.rerun()
 with col2:
@@ -591,6 +611,10 @@ with col2:
     )
     if master_files_selected and st.button("✕", key="remove_master_files", help="Remove all selected Master files"):
         st.session_state["active_master_files"] = []
+        for k in list(st.session_state.keys()):
+            if k.startswith("_df_cache_"):
+                del st.session_state[k]
+        gc.collect()
         st.session_state["master_uploader_version"] += 1
         st.rerun()
 with col3:
@@ -602,6 +626,10 @@ with col3:
     )
     if bounce_file_selected is not None and st.button("✕", key="remove_bounce_file", help="Remove selected bounce file"):
         st.session_state["active_bounce_file"] = None
+        for k in list(st.session_state.keys()):
+            if k.startswith("_df_cache_"):
+                del st.session_state[k]
+        gc.collect()
         st.session_state["bounce_uploader_version"] += 1
         st.rerun()
 
