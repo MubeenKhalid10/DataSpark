@@ -722,6 +722,23 @@ if active_raw_file is not None:
             help="Flags any email address whose domain ends in the .in (India) TLD.",
         )
 
+    with st.expander("📊 Output sorting & splitting settings", expanded=False):
+        st.caption(
+            "Choose how you want the final cleaned data split when downloading. "
+            "Splits are generated on-demand in the Download step — check what you need before running the pipeline."
+        )
+        split_by_location = st.checkbox(
+            "Split output by Location (country)", value=True,
+            key="split_by_location",
+            help="Groups the cleaned output by detected country and lets you download each country separately. "
+                 "Requires a mapped Location column.",
+        )
+        split_by_industry = st.checkbox(
+            "Split output by Industry", value=False,
+            key="split_by_industry",
+            help="Groups the cleaned output by the Industry field and lets you download each industry as a separate file.",
+        )
+
     st.subheader("Step 4 — Run the pipeline")
     st.caption("This runs all 9 cleaning steps in order and produces a campaign-ready file. Nothing is saved until you click below.")
 
@@ -798,12 +815,13 @@ if active_raw_file is not None:
 
             if any_special_mask.any():
                 removed_special_df = std[any_special_mask].copy()
-                matched_cols_list = []
-                for col in FINAL_COLUMNS:
-                    col_m = field_masks[col][any_special_mask]
-                    matched_cols_list.append(pd.Series(np.where(col_m, col, ""), index=removed_special_df.index))
-                combined_arr = np.column_stack([s.to_numpy() for s in matched_cols_list])
-                removed_special_df["Matched Fields"] = [", ".join(filter(None, row)) for row in combined_arr]
+                matched_flags = [np.where(field_masks[col][any_special_mask], col, "") for col in FINAL_COLUMNS if col in field_masks]
+                if matched_flags:
+                    combined_arr = np.column_stack(matched_flags)
+                    removed_special_df["Matched Fields"] = [", ".join(filter(None, row)) for row in combined_arr]
+                    del combined_arr, matched_flags
+                else:
+                    removed_special_df["Matched Fields"] = ""
                 st.session_state["special_chars_removed_df"] = removed_special_df
             else:
                 st.session_state["special_chars_removed_df"] = pd.DataFrame(columns=FINAL_COLUMNS + ["Matched Fields"])
@@ -958,61 +976,139 @@ if active_raw_file is not None:
 
         st.subheader("Step 6 — Download")
 
-        tab_main, tab_country, tab_audit = st.tabs(["Final campaign file", "Split by country", "Audit files (removed rows)"])
+        split_by_location = st.session_state.get("split_by_location", True)
+        split_by_industry = st.session_state.get("split_by_industry", False)
+
+        tabs_to_show = ["Final campaign file"]
+        if split_by_location:
+            tabs_to_show.append("Split by country")
+        if split_by_industry:
+            tabs_to_show.append("Split by industry")
+        tabs_to_show.append("Audit files (removed rows)")
+
+        all_tabs = st.tabs(tabs_to_show)
+        tab_idx = 0
+        tab_main = all_tabs[tab_idx]; tab_idx += 1
+        tab_country = all_tabs[tab_idx] if split_by_location else None; tab_idx += (1 if split_by_location else 0)
+        tab_industry = all_tabs[tab_idx] if split_by_industry else None; tab_idx += (1 if split_by_industry else 0)
+        tab_audit = all_tabs[tab_idx]
 
         with tab_main:
             final_df = st.session_state["cleaned_df"]
             is_large_dataset = len(final_df) > 100_000
 
-            if is_large_dataset:
-                st.info(f"📊 **Large dataset ({len(final_df):,} rows):** CSV format is used for high-performance and instant download.")
-                out_format = "csv"
-            else:
-                out_format = st.radio(
-                    "Download format",
-                    ["xlsx", "csv"],
-                    horizontal=True,
-                    help="xlsx opens directly in Excel; csv is the safer choice for uploading into most campaign/email tools.",
-                    key="main_format",
-                )
+            format_options = ["csv", "zip"] if is_large_dataset else ["xlsx", "csv", "zip"]
+            out_format = st.radio(
+                "Download format",
+                format_options,
+                index=0,
+                horizontal=True,
+                help="CSV is standard for campaign tools; ZIP compresses the CSV by ~90% for instant download.",
+                key="main_format",
+            )
 
-            if out_format == "csv":
-                csv_bytes = final_df.to_csv(index=False).encode("utf-8")
-                st.download_button("Download final campaign file (CSV)", data=csv_bytes, file_name="final_campaign_file.csv", mime="text/csv", type="primary")
+            if out_format == "zip":
+                zip_buf = io.BytesIO()
+                with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as z:
+                    z.writestr("final_campaign_file.csv", final_df.to_csv(index=False))
+                dl_data = zip_buf.getvalue()
+                dl_name = "final_campaign_file.zip"
+                dl_mime = "application/zip"
+            elif out_format == "csv":
+                dl_data = final_df.to_csv(index=False).encode("utf-8")
+                dl_name = "final_campaign_file.csv"
+                dl_mime = "text/csv"
             else:
                 buffer = io.BytesIO()
                 final_df.to_excel(buffer, index=False, engine="openpyxl")
-                st.download_button("Download final campaign file (XLSX)", data=buffer.getvalue(), file_name="final_campaign_file.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary")
+                dl_data = buffer.getvalue()
+                dl_name = "final_campaign_file.xlsx"
+                dl_mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+            st.download_button(
+                f"Download final campaign file ({out_format.upper()})",
+                data=dl_data,
+                file_name=dl_name,
+                mime=dl_mime,
+                type="primary",
+                key="dl_main_file_btn"
+            )
             st.caption("This file has already passed the final quality check — no duplicate or blank emails, ready to upload into your campaign tool.")
 
-        with tab_country:
-            st.caption(
-                "Split based on [data/countries.json](data/countries.json) country and city matching against Location. "
-                "'Other' means a location was present but no country/city keyword matched; 'Unknown' means Location was blank."
-            )
-            country_series = st.session_state.get("country_series", pd.Series())
-            country_counts = st.session_state.get("country_counts", {})
-            final_df = st.session_state["cleaned_df"]
-
-            if country_series.empty or set(country_counts.keys()) == {"Unknown"}:
-                st.info("No Location data was available to split by — map a Location column and re-run to use this.")
-            else:
-                counts_df = pd.DataFrame(
-                    [{"Group": k, "Rows": v} for k, v in sorted(country_counts.items(), key=lambda x: -x[1])]
+        if tab_country is not None:
+            with tab_country:
+                st.caption(
+                    "Split based on [data/countries.json](data/countries.json) country and city matching against Location. "
+                    "'Other' means a location was present but no country/city keyword matched; 'Unknown' means Location was blank."
                 )
-                st.dataframe(counts_df, width="stretch", hide_index=True)
-                for country, count in sorted(country_counts.items(), key=lambda x: -x[1]):
-                    if count == 0:
-                        continue
-                    cdf = final_df[country_series == country]
-                    csv_bytes = cdf.to_csv(index=False).encode("utf-8")
-                    st.download_button(
-                        f"Download {country} ({count:,} rows)",
-                        data=csv_bytes,
-                        file_name=f"final_campaign_file_{country.lower().replace('/', '_').replace(' ', '_')}.csv",
-                        mime="text/csv",
-                        key=f"dl_country_{country}",
+                country_series = st.session_state.get("country_series", pd.Series())
+                country_counts = st.session_state.get("country_counts", {})
+                final_df = st.session_state["cleaned_df"]
+
+                if country_series.empty or set(country_counts.keys()) == {"Unknown"}:
+                    st.info("No Location data was available to split by — map a Location column and re-run to use this.")
+                else:
+                    counts_df = pd.DataFrame(
+                        [{"Group": k, "Rows": v} for k, v in sorted(country_counts.items(), key=lambda x: -x[1])]
                     )
+                    st.dataframe(counts_df, width="stretch", hide_index=True)
+
+                    col_sel, col_dl = st.columns([2, 1])
+                    available_countries = [k for k, v in sorted(country_counts.items(), key=lambda x: -x[1]) if v > 0]
+                    with col_sel:
+                        selected_country = st.selectbox("Select Country to Download", available_countries, key="selected_country_dl")
+                    with col_dl:
+                        if selected_country:
+                            cnt = country_counts.get(selected_country, 0)
+                            country_df = final_df[country_series == selected_country]
+                            c_bytes = country_df.to_csv(index=False).encode("utf-8")
+                            safe_name = selected_country.lower().replace('/', '_').replace(' ', '_')
+                            st.download_button(
+                                f"⬇️ Download {selected_country} ({cnt:,} rows)",
+                                data=c_bytes,
+                                file_name=f"final_campaign_file_{safe_name}.csv",
+                                mime="text/csv",
+                                type="primary",
+                                key=f"dl_single_country_{safe_name}",
+                            )
+
+        if tab_industry is not None:
+            with tab_industry:
+                st.caption(
+                    "Split by the Industry field. Each unique industry value gets its own downloadable file. "
+                    "Blank industry values are grouped under 'Unknown'."
+                )
+                final_df = st.session_state["cleaned_df"]
+
+                if "Industry" not in final_df.columns or (final_df["Industry"].astype(str).str.strip() == "").all():
+                    st.info("No Industry data was available — map an Industry column and re-run to use this.")
+                else:
+                    industry_series = final_df["Industry"].astype(str).str.strip().replace("", "Unknown")
+                    industry_counts = industry_series.value_counts().to_dict()
+
+                    ind_counts_df = pd.DataFrame(
+                        [{"Industry": k, "Rows": v} for k, v in sorted(industry_counts.items(), key=lambda x: -x[1])]
+                    )
+                    st.dataframe(ind_counts_df, width="stretch", hide_index=True)
+
+                    ind_col_sel, ind_col_dl = st.columns([2, 1])
+                    available_industries = [k for k, v in sorted(industry_counts.items(), key=lambda x: -x[1]) if v > 0]
+                    with ind_col_sel:
+                        selected_industry = st.selectbox("Select Industry to Download", available_industries, key="selected_industry_dl")
+                    with ind_col_dl:
+                        if selected_industry:
+                            ind_cnt = industry_counts.get(selected_industry, 0)
+                            industry_df = final_df[industry_series == selected_industry]
+                            ind_bytes = industry_df.to_csv(index=False).encode("utf-8")
+                            safe_ind = selected_industry.lower().replace('/', '_').replace(' ', '_').replace('&', 'and')
+                            st.download_button(
+                                f"⬇️ Download {selected_industry} ({ind_cnt:,} rows)",
+                                data=ind_bytes,
+                                file_name=f"final_campaign_file_{safe_ind}.csv",
+                                mime="text/csv",
+                                type="primary",
+                                key=f"dl_single_industry_{safe_ind}",
+                            )
 
         with tab_audit:
             st.caption("Rows removed or altered during cleaning, for your own verification — nothing here is in the final file.")
@@ -1060,4 +1156,3 @@ if active_raw_file is not None:
                 )
 else:
     st.info("Select files above, click 'Use selected files', then continue. Master File and Bounce File are optional but recommended for cleaner results.")
- 
