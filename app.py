@@ -402,11 +402,12 @@ def load_country_reference(json_path_str):
 def classify_country_from_location(location_text, country_ref):
     """Classify country from a free-form Location cell.
 
-    Updated behaviour: prefer explicit state/country tokens first (exact country
-    or alias matches). Only if no country/state is found do we fall back to
-    city-based matching. This follows the requirement: "first look for
-    state/country in location column, and if state/country name is not given
-    then look for city name and classify/sort the email".
+    Rules (in priority order):
+    1. If a country name (or known alias) appears ANYWHERE in the location text,
+       return that country immediately — city/state tokens are ignored.
+    2. If no country name is found, scan the location parts LEFT-TO-RIGHT and
+       return the country of the FIRST city that matches.
+    3. If nothing matches, return "Unknown".
     """
     text_raw = str(location_text)
     normalized = normalize_place_text(text_raw)
@@ -440,38 +441,26 @@ def classify_country_from_location(location_text, country_ref):
         if f" {alias_norm} " in full_text:
             return country
 
-    # 3) Fallback: city-based matching if no explicit country/state token found.
-    scores = {}
-    # Fast path: try exact city matches first, then attempt substring matching
+    # ── PRIORITY 2: City-based fallback — left-to-right, first match wins ────
+    # Scan parts in the order they appear in the location string. The first
+    # part that resolves to a known city is used immediately — no scoring.
     for part in parts:
         matched_countries = city_to_countries.get(part)
         if not matched_countries:
-            # Try to match known city keys that appear inside the part (e.g.,
-            # "san francisco bay area" should match "san francisco"). This is
-            # slightly more expensive but only runs when exact match fails.
+            # Substring match: e.g. "san francisco bay area" → "san francisco"
             for city_key, countries_set in city_to_countries.items():
                 if city_key in part:
                     matched_countries = countries_set
                     break
-        if not matched_countries:
-            continue
-        weight = 3 if len(matched_countries) == 1 else 1
-        for country in matched_countries:
-            scores[country] = scores.get(country, 0) + weight
+        if matched_countries:
+            # Return immediately on first city hit (deterministic left-to-right)
+            if len(matched_countries) == 1:
+                return next(iter(matched_countries))
+            # City shared by multiple countries — pick alphabetically for stability
+            return sorted(matched_countries)[0]
 
-    if scores:
-        ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-        top_country, top_score = ranked[0]
-        second_score = ranked[1][1] if len(ranked) > 1 else -1
-
-        # Require a clear winner when city appears in multiple countries.
-        if top_score >= second_score + 2:
-            return top_country
-
-        # If there is a tie-ish result, still return the top_country as a best guess.
-        return top_country
-
-    return "Other"
+    # ── No match — location present but not in countries.json ────────────────
+    return "Unknown"
 
 
 def classify_countries_fast(location_series, country_ref):
@@ -576,7 +565,7 @@ st.markdown('<div class="upload-card">Select files first, then click "Use select
 
 st.info(
     "💡 **Important for 500k+ Rows on Cloud:**\n\n"
-    "Cloud hosts (Streamlit Cloud, AWS, Cloudflare) enforce a **60–90 second network timeout** per upload request. "
+    "Cloud hosts (Streamlit Cloud) enforce a **60–90 second network timeout** per upload request. "
     "Uploading an uncompressed 100MB+ CSV over standard broadband takes 3–5 minutes and triggers a timeout (`ClientDisconnect`).\n\n"
     "👉 **Recommended:** Right-click your CSV and choose **Send to → Compressed (zipped) folder** (or `.csv.gz`). "
     "This reduces file size by **90%** (e.g. from 150MB down to ~15MB), uploading in **under 15 seconds** with zero timeouts!"
@@ -842,9 +831,9 @@ if active_raw_file is not None:
 
             report.append(
                 f"Step 4 - Separated special-character rows into audit file: {before - len(std):,} rows removed from final output "
-                f"({rows_with_special_chars_email:,} emails had special characters, "
-                f"{total_special_chars_email:,} special characters found in Email field total). "
-                f"Then cleaned non-email text fields in remaining rows: {rows_changed_after_clean:,} rows cleaned"
+                f"({rows_with_special_chars_email:,} emails had special characters)"
+                # f"{total_special_chars_email:,} special characters found in Email field total). "
+                # f"Then cleaned non-email text fields in remaining rows: {rows_changed_after_clean:,} rows cleaned"
             )
             del any_special_mask, field_masks, email_special_mask
             gc.collect()
@@ -1074,37 +1063,69 @@ if active_raw_file is not None:
 
         if tab_industry is not None:
             with tab_industry:
-                st.caption(
-                    "Split by the Industry field. Each unique industry value gets its own downloadable file. "
-                    "Blank industry values are grouped under 'Unknown'."
-                )
                 final_df = st.session_state["cleaned_df"]
 
-                if "Industry" not in final_df.columns or (final_df["Industry"].astype(str).str.strip() == "").all():
-                    st.info("No Industry data was available — map an Industry column and re-run to use this.")
+                # Determine the best column to split by:
+                # Priority: mapped Industry column → any non-empty column in cleaned df
+                industry_col_in_df = "Industry" if (
+                    "Industry" in final_df.columns
+                    and not (final_df["Industry"].astype(str).str.strip() == "").all()
+                ) else None
+
+                # Collect all columns that have at least some non-blank values for user to pick from
+                # Exclude personal/identifier columns that don't make sense as split-by groups
+                _exclude_from_split = {"First Name", "Last Name", "Email"}
+                splittable_cols = [
+                    c for c in final_df.columns
+                    if c not in _exclude_from_split
+                    and not (final_df[c].astype(str).str.strip() == "").all()
+                ]
+
+                if not splittable_cols:
+                    st.info("No data columns available to split by — re-run the pipeline first.")
                 else:
-                    industry_series = final_df["Industry"].astype(str).str.strip().replace("", "Unknown")
+                    # Default split column: Industry if available, else first splittable col
+                    default_split_col = industry_col_in_df or splittable_cols[0]
+                    default_idx = splittable_cols.index(default_split_col) if default_split_col in splittable_cols else 0
+
+                    split_col_choice = st.selectbox(
+                        "Column to split by",
+                        splittable_cols,
+                        index=default_idx,
+                        key="industry_split_col_choice",
+                        help="Choose which column to group/split the data by. Defaults to Industry if available; "
+                             "select any other column (e.g. Company) if your file stores industry data there.",
+                    )
+
+                    st.caption(
+                        f"Splitting by **{split_col_choice}**. Each unique value gets its own downloadable file. "
+                        "Blank values are grouped under 'Unknown'."
+                    )
+
+                    industry_series = final_df[split_col_choice].astype(str).str.strip()
+                    industry_series = industry_series.replace("", "Unknown").replace("nan", "Unknown")
                     industry_counts = industry_series.value_counts().to_dict()
 
                     ind_counts_df = pd.DataFrame(
-                        [{"Industry": k, "Rows": v} for k, v in sorted(industry_counts.items(), key=lambda x: -x[1])]
+                        [{"Group": k, "Rows": v} for k, v in sorted(industry_counts.items(), key=lambda x: -x[1])]
                     )
                     st.dataframe(ind_counts_df, width="stretch", hide_index=True)
 
                     ind_col_sel, ind_col_dl = st.columns([2, 1])
                     available_industries = [k for k, v in sorted(industry_counts.items(), key=lambda x: -x[1]) if v > 0]
                     with ind_col_sel:
-                        selected_industry = st.selectbox("Select Industry to Download", available_industries, key="selected_industry_dl")
+                        selected_industry = st.selectbox("Select group to download", available_industries, key="selected_industry_dl")
                     with ind_col_dl:
                         if selected_industry:
                             ind_cnt = industry_counts.get(selected_industry, 0)
                             industry_df = final_df[industry_series == selected_industry]
                             ind_bytes = industry_df.to_csv(index=False).encode("utf-8")
                             safe_ind = selected_industry.lower().replace('/', '_').replace(' ', '_').replace('&', 'and')
+                            safe_col = split_col_choice.lower().replace(' ', '_')
                             st.download_button(
                                 f"⬇️ Download {selected_industry} ({ind_cnt:,} rows)",
                                 data=ind_bytes,
-                                file_name=f"final_campaign_file_{safe_ind}.csv",
+                                file_name=f"split_{safe_col}_{safe_ind}.csv",
                                 mime="text/csv",
                                 type="primary",
                                 key=f"dl_single_industry_{safe_ind}",
