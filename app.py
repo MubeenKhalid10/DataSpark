@@ -220,6 +220,9 @@ SPECIAL_CHARS_PATTERN = re.compile(
 SPECIAL_CHARS_COUNT_PATTERN = re.compile(r"[^\x00-\x7F]|[~*!#$%^?]")
 
 COUNTRIES_JSON_PATH = Path(__file__).parent / "data" / "countries.json"
+MAX_UNCOMPRESSED_UPLOAD_BYTES = 50 * 1024 * 1024
+MAX_COMPRESSED_UPLOAD_BYTES = 100 * 1024 * 1024
+MAX_ARCHIVE_CONTENT_BYTES = 250 * 1024 * 1024
 
  
  
@@ -476,6 +479,72 @@ def classify_countries(location_series, country_ref):
     return classify_countries_fast(location_series, country_ref)
 
 
+def get_upload_size(file):
+    size = getattr(file, "size", None)
+    if size is not None:
+        return int(size)
+    return len(file.getvalue())
+
+def validate_upload(file):
+    """Return a user-facing error for uploads likely to exhaust process memory."""
+    if file is None:
+        return None
+
+    filename = file.name.lower()
+    upload_size = get_upload_size(file)
+    is_compressed = filename.endswith((".zip", ".gz", ".gzip"))
+    if upload_size > (MAX_COMPRESSED_UPLOAD_BYTES if is_compressed else MAX_UNCOMPRESSED_UPLOAD_BYTES):
+        limit_mb = MAX_COMPRESSED_UPLOAD_BYTES if is_compressed else MAX_UNCOMPRESSED_UPLOAD_BYTES
+        if is_compressed:
+            return (
+                f"'{file.name}' is larger than the {limit_mb // (1024 * 1024)} MB compressed-upload limit. "
+                "Please split it into smaller ZIP/GZ files before uploading."
+            )
+        return (
+            f"'{file.name}' is {upload_size / (1024 * 1024):,.1f} MB, which is too large to process safely. "
+            "Please first convert it to a ZIP or GZ compressed file, then upload the compressed version."
+        )
+
+    if filename.endswith(".zip"):
+        try:
+            file.seek(0)
+            with zipfile.ZipFile(file) as archive:
+                data_files = [
+                    info for info in archive.infolist()
+                    if not info.is_dir()
+                    and not info.filename.startswith("__MACOSX")
+                    and info.filename.lower().endswith((".csv", ".xlsx", ".xls"))
+                ]
+                expanded_size = sum(info.file_size for info in data_files)
+                if expanded_size > MAX_ARCHIVE_CONTENT_BYTES:
+                    return (
+                        f"'{file.name}' expands to more than {MAX_ARCHIVE_CONTENT_BYTES // (1024 * 1024)} MB. "
+                        "Please split the source data into smaller ZIP/GZ files before uploading."
+                    )
+        except (OSError, zipfile.BadZipFile) as error:
+            return f"Could not inspect '{file.name}' safely: {error}"
+        finally:
+            file.seek(0)
+
+    if filename.endswith((".gz", ".gzip")):
+        try:
+            file.seek(0)
+            expanded_size = 0
+            with gzip.GzipFile(fileobj=file) as archive:
+                while archive.read(1024 * 1024):
+                    expanded_size += 1024 * 1024
+                    if expanded_size > MAX_ARCHIVE_CONTENT_BYTES:
+                        return (
+                            f"'{file.name}' expands to more than {MAX_ARCHIVE_CONTENT_BYTES // (1024 * 1024)} MB. "
+                            "Please split the source data into smaller ZIP/GZ files before uploading."
+                        )
+        except (OSError, EOFError) as error:
+            return f"Could not inspect '{file.name}' safely: {error}"
+        finally:
+            file.seek(0)
+
+    return None
+
 def load_file_internal(file):
     """Load CSV, XLSX, XLS, or ZIP/GZ archives with memory-efficient parsing."""
     filename = file.name.lower()
@@ -623,17 +692,36 @@ with col3:
         st.rerun()
 
 if st.button("Use selected files", type="secondary"):
-    if len(master_files_selected) > 3:
-        st.error("Please select no more than 3 Master files.")
+    selected_files = ([raw_file_selected] if raw_file_selected is not None else []) + list(master_files_selected) + (
+        [bounce_file_selected] if bounce_file_selected is not None else []
+    )
+    upload_errors = [error for file in selected_files if (error := validate_upload(file))]
+    if upload_errors:
+        for error in upload_errors:
+            st.error(error)
+        st.session_state["active_raw_file"] = None
         st.session_state["active_master_files"] = []
+        st.session_state["active_bounce_file"] = None
+    elif len(master_files_selected) > 3:
+        st.error("Please select no more than 3 Master files.")
+        st.session_state["active_raw_file"] = None
+        st.session_state["active_master_files"] = []
+        st.session_state["active_bounce_file"] = None
     else:
         st.session_state["active_master_files"] = master_files_selected
-    st.session_state["active_raw_file"] = raw_file_selected
-    st.session_state["active_bounce_file"] = bounce_file_selected
+        st.session_state["active_raw_file"] = raw_file_selected
+        st.session_state["active_bounce_file"] = bounce_file_selected
 
 active_raw_file = st.session_state.get("active_raw_file")
 active_master_files = st.session_state.get("active_master_files", [])
 active_bounce_file = st.session_state.get("active_bounce_file")
+for selected_file in ([active_raw_file] if active_raw_file is not None else []) + list(active_master_files) + (
+    [active_bounce_file] if active_bounce_file is not None else []
+):
+    upload_error = validate_upload(selected_file)
+    if upload_error:
+        st.error(upload_error)
+        st.stop()
 
 status_col1, status_col2, status_col3 = st.columns(3)
 with status_col1:
@@ -695,7 +783,7 @@ if active_raw_file is not None:
     if "Email" not in mapping:
         st.warning("No Email column is mapped. Every row will be treated as blank-email and removed — double-check your mapping above.")
 
-    with st.expander("⚙️ Indian-contact detection settings", expanded=False):
+    with st.expander("⚙️ Indian-contact detection settings", expanded=True):
         st.caption(
             "If Step 3 is removing rows that shouldn't be flagged, check which signal is causing it "
             "by toggling these off one at a time and re-running. Every removed row is also available "
@@ -711,7 +799,7 @@ if active_raw_file is not None:
             help="Flags any email address whose domain ends in the .in (India) TLD.",
         )
 
-    with st.expander("📊 Output sorting & splitting settings", expanded=False):
+    with st.expander("📊 Output sorting & splitting settings", expanded=True):
         st.caption(
             "Choose how you want the final cleaned data split when downloading. "
             "Splits are generated on-demand in the Download step — check what you need before running the pipeline."
@@ -1015,7 +1103,7 @@ if active_raw_file is not None:
                 dl_mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
             st.download_button(
-                f"Download final campaign file ({out_format.upper()})",
+                f"⬇️ Download final campaign file ({out_format.upper()})",
                 data=dl_data,
                 file_name=dl_name,
                 mime=dl_mime,
@@ -1154,13 +1242,39 @@ if active_raw_file is not None:
             if len(special_chars_df) > 0:
                 st.dataframe(special_chars_df.head(20), width="stretch")
                 st.download_button(
-                    "Download separated special-characters file (full list)",
+                    "⬇️ Download uncleaned special-characters file (full list)",
                     data=special_chars_df.to_csv(index=False).encode("utf-8"),
-                    file_name="special_characters_separated.csv",
+                    file_name="special_characters_separated_uncleaned.csv",
                     mime="text/csv",
                     key="dl_specialchars_audit",
                 )
                 st.caption("This file is not cleaned. It contains original rows exactly as detected with special characters.")
+
+                # Build cleaned version: strip special chars from all non-email columns
+                _audit_cleanable_cols = [c for c in FINAL_COLUMNS if c != "Email" and c in special_chars_df.columns]
+                special_chars_cleaned_df = special_chars_df.drop(
+                    columns=[c for c in ["Matched Fields"] if c in special_chars_df.columns],
+                    errors="ignore",
+                ).copy()
+                for _col in _audit_cleanable_cols:
+                    special_chars_cleaned_df[_col] = (
+                        special_chars_cleaned_df[_col]
+                        .astype(str)
+                        .str.replace(SPECIAL_CHARS_COUNT_PATTERN, "", regex=True)
+                        .str.replace(r"\s+", " ", regex=True)
+                        .str.strip()
+                    )
+
+                st.markdown("**Cleaned preview** — same rows after removing special characters from non-email fields:")
+                st.dataframe(special_chars_cleaned_df.head(20), width="stretch")
+                st.download_button(
+                    "⬇️ Download cleaned special-characters file (full list)",
+                    data=special_chars_cleaned_df.to_csv(index=False).encode("utf-8"),
+                    file_name="special_characters_separated_cleaned.csv",
+                    mime="text/csv",
+                    key="dl_specialchars_cleaned_audit",
+                )
+                st.caption("Email column is preserved as-is. Only non-email fields have had special characters stripped.")
 
             st.divider()
 
