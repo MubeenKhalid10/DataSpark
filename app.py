@@ -220,8 +220,8 @@ st.markdown(
     }
 
 .lf-section-no {
-    font-size: 1.5rem;
-    line-height: 1;
+    font-size: 2rem;
+    line-height: 2;
     font-weight: 800;
     letter-spacing: 0.08em;
     margin-bottom: 0.4rem;
@@ -1059,7 +1059,7 @@ def get_email_series(df, mapping):
 
 
 # ---------------- FILE UPLOADS ----------------
-section_header("01", "Upload")
+section_header("01-Upload the Files", "Upload")
 st.markdown('<div class="upload-card">Drag and drop your campaign sources, then click "Use Selected Files".</div>', unsafe_allow_html=True)
 
 with st.expander("Large-file upload tip", expanded=False):
@@ -1181,7 +1181,7 @@ if active_raw_file is not None:
         st.info("Please make sure the file is a valid CSV, XLSX, XLS, or ZIP/GZ file and isn't corrupted.")
         st.stop()
 
-    section_header("02", "Review Data")
+    section_header("02-Preview Selected Raw File Data", "Review Data")
     summary_cols = st.columns(4)
     summary_cols[0].metric("Rows", f"{df.shape[0]:,}")
     summary_cols[1].metric("Columns", f"{df.shape[1]:,}")
@@ -1192,7 +1192,7 @@ if active_raw_file is not None:
 
     auto_mapping = auto_map_columns(df)
 
-    section_header("03", "Configure")
+    section_header("03- Map Columns", "Configure")
     st.write(
         "Confirm column mapping and filtering options before processing. "
         "All cleaning logic remains exactly the same."
@@ -1254,13 +1254,11 @@ if active_raw_file is not None:
             help="Groups the cleaned output by the Industry field and lets you download each industry as a separate file.",
         )
 
-    section_header("04", "Run Processing")
+    section_header("04-Process The Data Files", "Run Processing")
     st.caption("Runs the full cleaning workflow and prepares campaign-ready output.")
 
     if st.button("Run Cleaning Pipeline", type="primary"):
         with st.spinner("Processing — running high-performance cleaning pipeline..."):
-            progress_bar = st.progress(0, text="Starting cleaning pipeline...")
-            TOTAL_STEPS = 9
             
             report = []
             start_count = len(df)
@@ -1443,8 +1441,6 @@ if active_raw_file is not None:
             else:
                 country_series = pd.Series(["Unknown"] * len(std), index=std.index)
 
-            progress_bar.progress(1.0, text="Done! Cleaning complete.")
-
             st.session_state["cleaned_df"] = std
             st.session_state["country_series"] = country_series
             st.session_state["country_counts"] = country_series.value_counts().to_dict()
@@ -1459,7 +1455,7 @@ if active_raw_file is not None:
             gc.collect()
 
     if "cleaned_df" in st.session_state:
-        section_header("05", "Review Results")
+        section_header("05-Preview Cleaned Data Results", "Review Results")
 
         metrics = st.session_state.get("metrics", {})
         m1, m2, m3, m4 = st.columns(4)
@@ -1477,7 +1473,7 @@ if active_raw_file is not None:
         st.dataframe(st.session_state["cleaned_df"].head(50), width="stretch")
         st.caption(f"{st.session_state['cleaned_df'].shape[0]:,} rows x {st.session_state['cleaned_df'].shape[1]} columns")
 
-        section_header("06", "Download")
+        section_header("06-Download the Cleaned Data", "Download")
 
         split_by_location = st.session_state.get("split_by_location", True)
         split_by_industry = st.session_state.get("split_by_industry", False)
