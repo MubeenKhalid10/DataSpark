@@ -455,12 +455,26 @@ st.markdown(
             padding-top: 4.75rem;
         }
     }
+      /* Special Characters Download Button */
+    div[data-testid="stDownloadButton"] button[kind="secondary"] {
+        background: linear-gradient(135deg, var(--lf-primary), var(--lf-primary-2)) !important;
+                color: #ffffff !important;
+                box-shadow: 0 10px 20px rgba(60, 55, 214, 0.22);
+        border-radius: 8px !important;
+        font-weight: 600 !important;
+    }
+
+    div[data-testid="stDownloadButton"] button[kind="secondary"]:hover {
+      background: linear-gradient(135deg, var(--lf-primary), var(--lf-primary-2)) !important;
+              color: #ffffff !important;
+              box-shadow: 0 10px 20px rgba(60, 55, 214, 0.22);
+    }
     /* =========================================================
    LEADFLOW - HOW IT WORKS BUTTON
    ========================================================= */
 
 div[data-testid="stButton"] div.st-key-how_it_works_btn button {
-    width: 100% !important;
+    width: 200% !important;
     min-width: 130px !important;
     height: 42px !important;
     min-height: 42px !important;
@@ -1707,7 +1721,7 @@ if active_raw_file is not None:
             if len(email_special_df) > 0:
                 st.dataframe(email_special_df.head(20), width="stretch")
                 st.download_button(
-                    "Download email-special-characters file (full list)",
+                    "⬇️ Download email-special-characters file (full list)",
                     data=email_special_df.to_csv(index=False).encode("utf-8"),
                     file_name="email_special_characters_separated.csv",
                     mime="text/csv",
