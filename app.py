@@ -27,22 +27,64 @@ import pandas as pd
 import streamlit as st
 
 st.set_page_config(page_title="Lead Cleaner", layout="wide")
-st.markdown(
-    """
-    <div class="lf-topbar">
-        <div class="lf-brand-wrap">
-            <div class="lf-brand">LeadFlow</div>
-            <div class="lf-tagline">Turn messy lead data into clean, campaign-ready contacts.</div>
-        </div>
-        <div class="lf-nav-actions">
-            <span class="lf-chip">Ready to process</span>
-            <span class="lf-link">How it works</span>
-        </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+st.session_state.setdefault("show_how_it_works", False)
 
+
+@st.dialog("How LeadFlow works")
+def show_how_it_works():
+    st.markdown(
+        """
+        ### Clean your lead data in 5 steps
+
+        **1. Upload your files**  
+        Upload your raw lead file and optionally provide Master and Bounce files.
+
+        **2. Review your data**  
+        Preview the uploaded data and confirm the detected column mapping.
+
+        **3. Run the cleaning pipeline**  
+        LeadFlow removes blank emails, filters Indian contacts, separates
+        special-character records, removes duplicate emails, and applies
+        Master/Bounce suppression.
+
+        **4. Review quality metrics**  
+        Inspect the processing results and final data quality.
+
+        **5. Export your files**  
+        Download the final campaign-ready file and optional country,
+        industry, and audit files.
+        """
+    )
+
+
+def render_topbar():
+    top_left, top_how = st.columns([9, 2])
+
+    with top_left:
+        st.markdown(
+            """
+            <div class="lf-brand-wrap">
+                <div class="lf-brand">LeadFlow</div>
+                <div class="lf-tagline">
+                    Turn messy lead data into clean, campaign-ready contacts.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with top_how:
+        if st.button(
+            "How it works",
+            key="how_it_works_btn",
+            use_container_width=True,
+        ):
+            show_how_it_works()
+
+
+st.markdown('<div class="lf-topbar">', unsafe_allow_html=True)
+render_topbar()
+st.markdown('</div>', unsafe_allow_html=True)
 
 def section_header(number, title):
     st.markdown(
@@ -72,6 +114,34 @@ st.markdown(
         --lf-primary-2: #5a56eb;
     }
 
+     /* How it works button */
+    div.stButton > button[kind="secondary"] {
+        white-space: nowrap !important;
+        min-width: 125px !important;
+        height: 40px !important;
+        border-radius: 10px !important;
+        border: 1px solid #2563eb !important;
+        background: #2563eb !important;
+        color: white !important;
+        font-weight: 600 !important;
+        font-size: 14px !important;
+        padding: 0 18px !important;
+    }
+
+    div.stButton > button[kind="secondary"]:hover {
+        background: #1d4ed8 !important;
+        border-color: #1d4ed8 !important;
+        color: white !important;
+    }
+
+    div.stButton > button[kind="secondary"]:focus {
+        background: #2563eb !important;
+        border-color: #2563eb !important;
+        color: white !important;
+        box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2) !important;
+    }
+
+
     html, body, [class*="css"] {
         font-family: "Manrope", "Segoe UI", sans-serif !important;
     }
@@ -84,16 +154,19 @@ st.markdown(
 
     [data-testid="stAppViewContainer"] [data-testid="stMainBlockContainer"] {
         max-width: 1120px;
-        padding-top: 1.2rem;
+        padding-top: 5.25rem;
         padding-bottom: 3rem;
     }
 
+    /* Keep custom app header visible below Streamlit deploy/share header. */
+    [data-testid="stHeader"] {
+        background: rgba(247, 248, 252, 0.85);
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+    }
+
     .lf-topbar {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 1rem;
-        padding: 0.1rem 0 1.1rem;
+        padding: 0.2rem 0 1.1rem;
         border-bottom: 1px solid #e7eaf4;
         margin-bottom: 1.2rem;
     }
@@ -106,7 +179,7 @@ st.markdown(
     }
 
     .lf-brand {
-        font-size: 1.7rem;
+        font-size: 1.85rem;
         font-weight: 800;
         letter-spacing: -0.03em;
         color: #3340df;
@@ -118,27 +191,38 @@ st.markdown(
         font-weight: 500;
     }
 
-    .lf-nav-actions {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
+    .lf-inline-panel {
+        border: 1px solid #dfe4f2;
+        border-radius: 12px;
+        background: #fbfcff;
+        padding: 0.85rem 1rem;
+        color: #2f3550;
+        margin: 0.25rem 0 1rem;
     }
 
-    .lf-chip {
-        display: inline-flex;
-        align-items: center;
-        padding: 0.34rem 0.75rem;
-        border-radius: 999px;
-        background: #e9edff;
-        color: #2f3ad1;
-        font-weight: 700;
-        font-size: 0.78rem;
+    .lf-inline-panel ol {
+        margin: 0.5rem 0 0.2rem 1rem;
     }
 
-    .lf-link {
-        color: #2a314a;
-        font-weight: 600;
-        font-size: 0.9rem;
+    .st-key-ready_chip_btn button {
+        border-radius: 999px !important;
+        border: 1px solid #d2d9f2 !important;
+        background: #eef1ff !important;
+        color: #2f3ad1 !important;
+        font-size: 0.8rem !important;
+        font-weight: 700 !important;
+        min-height: 2.1rem !important;
+    }
+
+    .st-key-how_it_works_btn button {
+        border-radius: 999px !important;
+        border: 1px solid #d8deef !important;
+        background: #ffffff !important;
+        color: #2a314a !important;
+        font-size: 0.84rem !important;
+        font-weight: 700 !important;
+        min-height: 2.1rem !important;
+        white-space: nowrap !important;
     }
 
     .lf-section-head {
@@ -157,9 +241,19 @@ st.markdown(
     .lf-section-head h2 {
         margin: 0;
         color: var(--lf-title);
-        font-size: 2rem;
+        font-size: 2.2rem;
         line-height: 1.15;
         letter-spacing: -0.02em;
+    }
+
+    [data-testid="stExpander"] {
+        border: 1px solid #dfe4f2;
+        border-radius: 14px;
+        background: #fbfcff;
+    }
+
+    [data-testid="stExpander"] details summary {
+        font-weight: 700;
     }
 
     [data-testid="stFileUploaderDropzone"] svg {display: none;}
@@ -270,6 +364,17 @@ st.markdown(
     [data-testid="stTabs"] [role="tab"] {
         border-radius: 10px 10px 0 0;
     }
+
+    [data-testid="stFileUploader"] {
+        border: 1px solid #dce2ef;
+        border-radius: 14px;
+        padding: 0.35rem 0.45rem;
+        background: #ffffff;
+    }
+
+    [data-testid="stFileUploader"] section {
+        background: #ffffff;
+    }
     
     /* Global Loading Overlay & Interaction Blocker */
     @keyframes global-spinner-spin {
@@ -345,25 +450,15 @@ st.markdown(
         .lf-section-head h2 {
             font-size: 1.7rem;
         }
+        [data-testid="stAppViewContainer"] [data-testid="stMainBlockContainer"] {
+            padding-top: 4.75rem;
+        }
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-with st.expander("ℹ️ How this works ", expanded=False):
-    st.markdown(
-        """
-1. Upload your raw lead file one file at a time. The tool auto-detects which columns correspond to First Name, Last Name, Company, Email, Job Title, Industry, and Location. If your file has a single Full Name column instead of separate First/Last, it will be auto-split. Only the relevant fields are kept for the final output.
-2. Upload Master File and Master Bounce File (optional). These are used to remove any contacts that have already been contacted or have bounced in the past, so you don't re-contact them.
-3. System will show preview of your raw data and detected column mapping. You can adjust the mapping if needed.
-4. Click "Run cleaning pipeline" to process the data. Progress bar will show the status of each step. The steps include:
-5. Sample of cleaned data will be shown for review, along with a processing report summarizing what happened at each step.
-6. Select your preferred download format (CSV or XLSX) and download the final cleaned campaign file.
-7. After processing you'll also get: a metrics summary (duplicates removed, Indian contacts removed, special characters found), a country-based split (using data/countries.json), and downloadable audit files showing exactly which rows were removed and why.
-        """
-    )
- 
 FIELD_HELP = {
     "Full Name": "If your file has one combined name column instead of separate First/Last, map it here — it will be auto-split.",
     "First Name": "Contact's first name.",
@@ -872,21 +967,23 @@ def get_email_series(df, mapping):
 section_header("01", "Upload")
 st.markdown('<div class="upload-card">Drag and drop your campaign sources, then click "Use Selected Files".</div>', unsafe_allow_html=True)
 
-st.info(
-    "💡 **Important for 500k+ Rows on Cloud:**\n\n"
-    "Cloud hosts (Streamlit Cloud) enforce a **60–90 second network timeout** per upload request. "
-    "Uploading an uncompressed 100MB+ CSV over standard broadband takes 3–5 minutes and triggers a timeout (`ClientDisconnect`).\n\n"
-    "👉 **Recommended:** Right-click your CSV and choose **Send to → Compressed (zipped) folder** (or `.csv.gz`). "
-    "This reduces file size by **90%** (e.g. from 150MB down to ~15MB), uploading in **under 15 seconds** with zero timeouts!"
-)
+with st.expander("Large-file upload tip", expanded=False):
+    st.info(
+        "💡 **Important for 500k+ Rows on Cloud:**\n\n"
+        "Cloud hosts (Streamlit Cloud) enforce a **60–90 second network timeout** per upload request. "
+        "Uploading an uncompressed 100MB+ CSV over standard broadband takes 3–5 minutes and triggers a timeout (`ClientDisconnect`).\n\n"
+        "👉 **Recommended:** Right-click your CSV and choose **Send to → Compressed (zipped) folder** (or `.csv.gz`). "
+        "This reduces file size by **90%** (e.g. from 150MB down to ~15MB), uploading in **under 15 seconds** with zero timeouts!"
+    )
 
 for uploader_name in ["raw", "master", "bounce"]:
     st.session_state.setdefault(f"{uploader_name}_uploader_version", 0)
 
 col1, col2, col3 = st.columns(3)
 with col1:
+    st.caption("Raw Lead File (Required)")
     raw_file_selected = st.file_uploader(
-        "Raw lead file (required)",
+        "Drag and drop CSV/XLSX",
         type=["csv", "xlsx", "xls", "zip", "gz"],
         key=f"raw_{st.session_state['raw_uploader_version']}",
         help="The messy export you want cleaned — from a scraper, CRM, or list purchase. Supports CSV, XLSX, XLS, ZIP, or GZ.",
@@ -900,8 +997,9 @@ with col1:
         st.session_state["raw_uploader_version"] += 1
         st.rerun()
 with col2:
+    st.caption("Master Files")
     master_files_selected = st.file_uploader(
-        "Master file(s) — up to 3 files (optional)",
+        "Exclude leads you already have",
         type=["csv", "xlsx", "xls", "zip", "gz"],
         accept_multiple_files=True,
         key=f"master_{st.session_state['master_uploader_version']}",
@@ -916,8 +1014,9 @@ with col2:
         st.session_state["master_uploader_version"] += 1
         st.rerun()
 with col3:
+    st.caption("Bounce File")
     bounce_file_selected = st.file_uploader(
-        "Master Bounce file (optional)",
+        "Previously bounced emails",
         type=["csv", "xlsx", "xls", "zip", "gz"],
         key=f"bounce_{st.session_state['bounce_uploader_version']}",
         help="Emails that have previously bounced. Any matching address will be removed to protect your sender reputation.",
