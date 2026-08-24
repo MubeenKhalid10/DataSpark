@@ -214,29 +214,30 @@ st.markdown(
         min-height: 2.1rem !important;
     }
 
-    .st-key-how_it_works_btn button {
-        border-radius: 999px !important;
-        border: 1px solid #d8deef !important;
-        background: #ffffff !important;
-        color: #2a314a !important;
-        font-size: 0.84rem !important;
-        font-weight: 700 !important;
-        min-height: 2.1rem !important;
-        white-space: nowrap !important;
-    }
-
     .lf-section-head {
         margin-top: 1.6rem;
         margin-bottom: 0.55rem;
     }
 
-    .lf-section-no {
-        color: #5660e3;
-        font-size: 0.74rem;
-        font-weight: 800;
-        letter-spacing: 0.12em;
-        margin-bottom: 0.2rem;
-    }
+.lf-section-no {
+    font-size: 1.5rem;
+    line-height: 1;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.4rem;
+
+    background: linear-gradient(
+        135deg,
+        #3c37d6 0%,
+        #5a56eb 100%
+    );
+
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+
+    display: inline-block;
+}
 
     .lf-section-head h2 {
         margin: 0;
@@ -454,6 +455,86 @@ st.markdown(
             padding-top: 4.75rem;
         }
     }
+    /* =========================================================
+   LEADFLOW - HOW IT WORKS BUTTON
+   ========================================================= */
+
+div[data-testid="stButton"] div.st-key-how_it_works_btn button {
+    width: 100% !important;
+    min-width: 130px !important;
+    height: 42px !important;
+    min-height: 42px !important;
+
+    padding: 0 18px !important;
+
+    border-radius: 12px !important;
+    border: 1px solid #3c37d6 !important;
+
+    background: #3c37d6 !important;
+    background-image: linear-gradient(
+        135deg,
+        #3c37d6 0%,
+        #5a56eb 100%
+    ) !important;
+
+    color: #ffffff !important;
+
+    font-family: "Manrope", "Segoe UI", sans-serif !important;
+    font-size: 0.84rem !important;
+    font-weight: 700 !important;
+
+    white-space: nowrap !important;
+
+    box-shadow: 0 8px 18px rgba(60, 55, 214, 0.22) !important;
+
+    transition: all 0.2s ease !important;
+}
+
+
+/* Text inside the button */
+div[data-testid="stButton"] div.st-key-how_it_works_btn button p,
+div[data-testid="stButton"] div.st-key-how_it_works_btn button span {
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    white-space: nowrap !important;
+}
+
+
+/* Hover */
+div[data-testid="stButton"] div.st-key-how_it_works_btn button:hover {
+    background: #302bc0 !important;
+    background-image: linear-gradient(
+        135deg,
+        #302bc0 0%,
+        #4b46d8 100%
+    ) !important;
+
+    border-color: #302bc0 !important;
+    color: #ffffff !important;
+
+    transform: translateY(-1px);
+
+    box-shadow: 0 10px 22px rgba(60, 55, 214, 0.30) !important;
+}
+
+
+/* Focus */
+div[data-testid="stButton"] div.st-key-how_it_works_btn button:focus,
+div[data-testid="stButton"] div.st-key-how_it_works_btn button:focus-visible {
+    background: #3c37d6 !important;
+    background-image: linear-gradient(
+        135deg,
+        #3c37d6 0%,
+        #5a56eb 100%
+    ) !important;
+
+    border-color: #3c37d6 !important;
+    color: #ffffff !important;
+
+    box-shadow:
+        0 0 0 3px rgba(60, 55, 214, 0.18),
+        0 8px 18px rgba(60, 55, 214, 0.22) !important;
+}
     </style>
     """,
     unsafe_allow_html=True,
@@ -1090,8 +1171,6 @@ if active_raw_file is not None:
     summary_cols = st.columns(4)
     summary_cols[0].metric("Rows", f"{df.shape[0]:,}")
     summary_cols[1].metric("Columns", f"{df.shape[1]:,}")
-    summary_cols[2].metric("Email", f"{int(df[auto_map_columns(df).get('Email')].notna().sum()):,}" if auto_map_columns(df).get("Email") in df.columns else "0")
-    summary_cols[3].metric("Location", f"{int(df[auto_map_columns(df).get('Location')].notna().sum()):,}" if auto_map_columns(df).get("Location") in df.columns else "0")
 
     st.caption("Quick preview of detected data before mapping and processing.")
     st.dataframe(df.head(10), width="stretch")
