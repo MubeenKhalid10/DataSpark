@@ -26,7 +26,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="Lead Cleaner", layout="wide")
+st.set_page_config(page_title="LeadFlow", layout="wide")
 st.session_state.setdefault("show_how_it_works", False)
 
 
