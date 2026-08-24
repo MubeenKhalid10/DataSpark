@@ -1,3 +1,7 @@
+{
+  "error": false,
+  "msg": "countries and cities retrieved (cleaned, duplicates removed)",
+  "data":
 [
 {
     "country": "United States",
@@ -49,6 +53,7 @@
         "Carmel",
         "Carrollton",
         "Cary",
+        "California",
         "Cedar Rapids",
         "Centennial",
         "Chandler",
@@ -119,6 +124,9 @@
         "Fresno",
         "Frisco",
         "Fullerton",
+        "Fremont",
+        "Florida",
+        "Florida City",
         "Gainesville",
         "Garden Grove",
         "Garland",
@@ -156,7 +164,6 @@
         "Jersey City",
         "Joliet",
         "Jurupa Valley",
-        "Kansas City",
         "Kansas City",
         "Kent",
         "Killeen",
@@ -205,6 +212,7 @@
         "Moreno Valley",
         "Murfreesboro",
         "Murrieta",
+        "Melbourne, Florida",
         "Nampa",
         "Naperville",
         "Nashville",
@@ -235,11 +243,9 @@
         "Palm Coast",
         "Palmdale",
         "Pasadena",
-        "Pasadena",
         "Paterson",
         "Pearland",
         "Pembroke Pines",
-        "Peoria",
         "Peoria",
         "Philadelphia",
         "Phoenix",
@@ -259,7 +265,6 @@
         "Renton",
         "Rialto",
         "Richardson",
-        "Richmond",
         "Richmond",
         "Rio Rancho",
         "Riverside",
@@ -297,8 +302,6 @@
         "Spokane",
         "Spokane Valley",
         "Springfield",
-        "Springfield",
-        "Springfield",
         "St. George",
         "St. Louis",
         "St. Paul",
@@ -332,6 +335,7 @@
         "Vancouver",
         "Ventura",
         "Victorville",
+        "Virginia",
         "Virginia Beach",
         "Visalia",
         "Waco",
@@ -2166,3 +2170,4 @@
     ]
 }
 ]
+}

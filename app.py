@@ -27,12 +27,147 @@ import pandas as pd
 import streamlit as st
 
 st.set_page_config(page_title="Lead Cleaner", layout="wide")
-st.title("Lead Data Cleaning & Sorting Tool")
-st.write("Upload your raw lead file (plus optional Master File and Master Bounce File) to produce a clean, campaign-ready file.")
+st.markdown(
+    """
+    <div class="lf-topbar">
+        <div class="lf-brand-wrap">
+            <div class="lf-brand">LeadFlow</div>
+            <div class="lf-tagline">Turn messy lead data into clean, campaign-ready contacts.</div>
+        </div>
+        <div class="lf-nav-actions">
+            <span class="lf-chip">Ready to process</span>
+            <span class="lf-link">How it works</span>
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+def section_header(number, title):
+    st.markdown(
+        f"""
+        <div class="lf-section-head">
+            <div class="lf-section-no">{number}</div>
+            <h2>{title}</h2>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 st.markdown(
     """
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
+
+    :root {
+        --lf-bg: #f7f8fc;
+        --lf-surface: #ffffff;
+        --lf-border: #dde2ef;
+        --lf-title: #161a2d;
+        --lf-body: #4c5268;
+        --lf-muted: #7f869b;
+        --lf-primary: #3c37d6;
+        --lf-primary-2: #5a56eb;
+    }
+
+    html, body, [class*="css"] {
+        font-family: "Manrope", "Segoe UI", sans-serif !important;
+    }
+
+    .stApp {
+        background:
+            radial-gradient(1000px 300px at 80% -10%, #e9ecff 0%, rgba(233, 236, 255, 0) 65%),
+            linear-gradient(180deg, #fafbff 0%, var(--lf-bg) 45%, #f6f7fb 100%);
+    }
+
+    [data-testid="stAppViewContainer"] [data-testid="stMainBlockContainer"] {
+        max-width: 1120px;
+        padding-top: 1.2rem;
+        padding-bottom: 3rem;
+    }
+
+    .lf-topbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        padding: 0.1rem 0 1.1rem;
+        border-bottom: 1px solid #e7eaf4;
+        margin-bottom: 1.2rem;
+    }
+
+    .lf-brand-wrap {
+        display: flex;
+        align-items: baseline;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+    }
+
+    .lf-brand {
+        font-size: 1.7rem;
+        font-weight: 800;
+        letter-spacing: -0.03em;
+        color: #3340df;
+    }
+
+    .lf-tagline {
+        color: var(--lf-muted);
+        font-size: 0.95rem;
+        font-weight: 500;
+    }
+
+    .lf-nav-actions {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .lf-chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.34rem 0.75rem;
+        border-radius: 999px;
+        background: #e9edff;
+        color: #2f3ad1;
+        font-weight: 700;
+        font-size: 0.78rem;
+    }
+
+    .lf-link {
+        color: #2a314a;
+        font-weight: 600;
+        font-size: 0.9rem;
+    }
+
+    .lf-section-head {
+        margin-top: 1.6rem;
+        margin-bottom: 0.55rem;
+    }
+
+    .lf-section-no {
+        color: #5660e3;
+        font-size: 0.74rem;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        margin-bottom: 0.2rem;
+    }
+
+    .lf-section-head h2 {
+        margin: 0;
+        color: var(--lf-title);
+        font-size: 2rem;
+        line-height: 1.15;
+        letter-spacing: -0.02em;
+    }
+
     [data-testid="stFileUploaderDropzone"] svg {display: none;}
+    [data-testid="stFileUploaderDropzone"] {
+        border: 1px dashed #cfd5e6;
+        border-radius: 14px;
+        background: #fbfcff;
+    }
     [data-testid="stFileUploaderDropzoneInstructions"] {padding-top: 0.5rem;}
     [data-testid="stColumn"]:first-child [data-testid="stFileUploaderDropzone"] button[aria-label*="Upload"],
     [data-testid="stColumn"]:last-child [data-testid="stFileUploaderDropzone"] button[aria-label*="Upload"],
@@ -89,7 +224,52 @@ st.markdown(
         font-size: 1.15rem !important;
         line-height: 1 !important;
     }
-    .upload-card {border: 1px solid #E8E8E8; border-radius: 12px; padding: 0.75rem 1rem; background: #FAFAFB;}
+    .upload-card {
+        border: 1px solid var(--lf-border);
+        border-radius: 14px;
+        padding: 0.75rem 1rem;
+        background: #fbfcff;
+        color: var(--lf-body);
+    }
+
+    [data-testid="stAlert"] {
+        border-radius: 12px;
+        border: 1px solid #d7ddef;
+    }
+
+    [data-testid="stMetric"] {
+        border: 1px solid var(--lf-border);
+        border-radius: 12px;
+        background: var(--lf-surface);
+        padding: 0.35rem 0.6rem;
+    }
+
+    [data-testid="stDataFrame"] {
+        border: 1px solid #dde3f0;
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    .stButton > button, [data-testid="stDownloadButton"] > button {
+        border-radius: 12px !important;
+        border: 1px solid transparent !important;
+        font-weight: 700 !important;
+        min-height: 2.5rem;
+    }
+
+    .stButton > button[kind="primary"], [data-testid="stDownloadButton"] > button[kind="primary"] {
+        background: linear-gradient(135deg, var(--lf-primary), var(--lf-primary-2)) !important;
+        color: #ffffff !important;
+        box-shadow: 0 10px 20px rgba(60, 55, 214, 0.22);
+    }
+
+    [data-testid="stTabs"] [role="tablist"] {
+        gap: 0.5rem;
+    }
+
+    [data-testid="stTabs"] [role="tab"] {
+        border-radius: 10px 10px 0 0;
+    }
     
     /* Global Loading Overlay & Interaction Blocker */
     @keyframes global-spinner-spin {
@@ -155,6 +335,16 @@ st.markdown(
         margin: 0.5rem 0;
         font-weight: 500;
         color: #1E293B;
+    }
+
+    @media (max-width: 900px) {
+        .lf-topbar {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+        .lf-section-head h2 {
+            font-size: 1.7rem;
+        }
     }
     </style>
     """,
@@ -328,6 +518,35 @@ def normalize_place_text(value):
     text = str(value).lower()
     text = re.sub(r"[^a-z0-9]+", " ", text)
     return re.sub(r"\s+", " ", text).strip()
+
+
+# US hints used to prevent false country matches when a location clearly indicates US.
+US_STATE_NAMES = {
+    "alabama", "alaska", "arizona", "arkansas", "california", "colorado", "connecticut",
+    "delaware", "florida", "georgia", "hawaii", "idaho", "illinois", "indiana", "iowa",
+    "kansas", "kentucky", "louisiana", "maine", "maryland", "massachusetts", "michigan",
+    "minnesota", "mississippi", "missouri", "montana", "nebraska", "nevada", "new hampshire",
+    "new jersey", "new mexico", "new york", "north carolina", "north dakota", "ohio",
+    "oklahoma", "oregon", "pennsylvania", "rhode island", "south carolina", "south dakota",
+    "tennessee", "texas", "utah", "vermont", "virginia", "washington", "west virginia",
+    "wisconsin", "wyoming", "district of columbia",
+}
+
+US_STATE_ABBREVIATIONS = {
+    "al", "ak", "az", "ar", "ca", "co", "ct", "de", "fl", "ga", "hi", "id", "il", "in",
+    "ia", "ks", "ky", "la", "me", "md", "ma", "mi", "mn", "ms", "mo", "mt", "ne", "nv",
+    "nh", "nj", "nm", "ny", "nc", "nd", "oh", "ok", "or", "pa", "ri", "sc", "sd", "tn",
+    "tx", "ut", "vt", "va", "wa", "wv", "wi", "wy", "dc",
+}
+
+
+def has_us_state_signal(parts, normalized_text):
+    if any(part in US_STATE_NAMES for part in parts):
+        return True
+
+    # Also detect two-letter state abbreviations in tokenized location text.
+    tokens = set(normalized_text.split())
+    return any(token in US_STATE_ABBREVIATIONS for token in tokens)
  
  
 @st.cache_resource(show_spinner=False)
@@ -426,6 +645,18 @@ def classify_country_from_location(location_text, country_ref):
     raw_parts = re.split(r"[,;|/\\-]+", text_raw)
     parts = [normalize_place_text(p) for p in raw_parts if normalize_place_text(p)]
     parts = [city_alias_lookup.get(part, part) for part in parts]
+    full_text = f" {normalized} "
+
+    # Strong US indicators (country aliases + state names/abbreviations)
+    explicit_us_alias_present = any(f" {alias_norm} " in full_text for alias_norm in ["us", "u s", "usa", "u s a", "united states", "united states of america"])
+    us_state_present = has_us_state_signal(parts, normalized)
+
+    # If the location explicitly says US/USA/U.S. or has a US state signal,
+    # treat it as United States up front.
+    if explicit_us_alias_present or us_state_present:
+        us_country = country_name_lookup.get("united states") or alias_lookup.get("usa")
+        if us_country:
+            return us_country
 
     # 1) Prefer explicit country/state tokens in the parts (exact match or alias).
     for part in parts:
@@ -436,7 +667,6 @@ def classify_country_from_location(location_text, country_ref):
 
     # 2) Also check the full normalized text for a country phrase (handles
     #    cases like "State of X" or "Somewhere, United States").
-    full_text = f" {normalized} "
     for country_norm, country in country_name_lookup.items():
         if f" {country_norm} " in full_text:
             return country
@@ -447,18 +677,28 @@ def classify_country_from_location(location_text, country_ref):
     # ── PRIORITY 2: City-based fallback — left-to-right, first match wins ────
     # Scan parts in the order they appear in the location string. The first
     # part that resolves to a known city is used immediately — no scoring.
+    #
+    # Important: avoid raw substring checks (city_key in part), because short
+    # city tokens can create cross-country false positives (for example,
+    # matching a tiny fragment inside a US state/city token).
     for part in parts:
         matched_countries = city_to_countries.get(part)
         if not matched_countries:
-            # Substring match: e.g. "san francisco bay area" → "san francisco"
+            # Boundary-aware phrase match: e.g. "san francisco bay area" →
+            # "san francisco", while avoiding loose partial-fragment matches.
             for city_key, countries_set in city_to_countries.items():
-                if city_key in part:
+                if len(city_key) < 4:
+                    continue
+                if re.search(rf"(?<![a-z0-9]){re.escape(city_key)}(?![a-z0-9])", part):
                     matched_countries = countries_set
                     break
         if matched_countries:
             # Return immediately on first city hit (deterministic left-to-right)
             if len(matched_countries) == 1:
                 return next(iter(matched_countries))
+            # Ambiguous city names: prefer United States when present.
+            if "United States" in matched_countries:
+                return "United States"
             # City shared by multiple countries — pick alphabetically for stability
             return sorted(matched_countries)[0]
 
@@ -629,8 +869,8 @@ def get_email_series(df, mapping):
 
 
 # ---------------- FILE UPLOADS ----------------
-st.subheader("Step 1 — Upload your files")
-st.markdown('<div class="upload-card">Select files first, then click "Use selected files" to continue.</div>', unsafe_allow_html=True)
+section_header("01", "Upload")
+st.markdown('<div class="upload-card">Drag and drop your campaign sources, then click "Use Selected Files".</div>', unsafe_allow_html=True)
 
 st.info(
     "💡 **Important for 500k+ Rows on Cloud:**\n\n"
@@ -691,7 +931,7 @@ with col3:
         st.session_state["bounce_uploader_version"] += 1
         st.rerun()
 
-if st.button("Use selected files", type="secondary"):
+if st.button("Use Selected Files", type="primary"):
     selected_files = ([raw_file_selected] if raw_file_selected is not None else []) + list(master_files_selected) + (
         [bounce_file_selected] if bounce_file_selected is not None else []
     )
@@ -747,17 +987,23 @@ if active_raw_file is not None:
         st.info("Please make sure the file is a valid CSV, XLSX, XLS, or ZIP/GZ file and isn't corrupted.")
         st.stop()
 
-    st.subheader("Step 2 — Check your raw data")
+    section_header("02", "Review Data")
+    summary_cols = st.columns(4)
+    summary_cols[0].metric("Rows", f"{df.shape[0]:,}")
+    summary_cols[1].metric("Columns", f"{df.shape[1]:,}")
+    summary_cols[2].metric("Email", f"{int(df[auto_map_columns(df).get('Email')].notna().sum()):,}" if auto_map_columns(df).get("Email") in df.columns else "0")
+    summary_cols[3].metric("Location", f"{int(df[auto_map_columns(df).get('Location')].notna().sum()):,}" if auto_map_columns(df).get("Location") in df.columns else "0")
+
+    st.caption("Quick preview of detected data before mapping and processing.")
     st.dataframe(df.head(10), width="stretch")
-    st.caption(f"{df.shape[0]:,} rows x {df.shape[1]} columns. Scroll right to confirm nothing looks obviously broken before you continue.")
+    st.caption(f"{df.shape[0]:,} rows x {df.shape[1]} columns.")
 
     auto_mapping = auto_map_columns(df)
 
-    st.subheader("Step 3 — Confirm column mapping")
+    section_header("03", "Configure")
     st.write(
-        "We auto-detected which of your file's columns correspond to each field below. "
-        "Fix anything that's wrong before processing — this determines exactly what ends up in your final file. "
-        "Fields greyed out have no matching column in this file and will be left blank."
+        "Confirm column mapping and filtering options before processing. "
+        "All cleaning logic remains exactly the same."
     )
     options = ["(none)"] + list(df.columns)
     mapping = {}
@@ -783,7 +1029,7 @@ if active_raw_file is not None:
     if "Email" not in mapping:
         st.warning("No Email column is mapped. Every row will be treated as blank-email and removed — double-check your mapping above.")
 
-    with st.expander("⚙️ Indian-contact detection settings", expanded=True):
+    with st.expander("Contact Filtering", expanded=True):
         st.caption(
             "If Step 3 is removing rows that shouldn't be flagged, check which signal is causing it "
             "by toggling these off one at a time and re-running. Every removed row is also available "
@@ -799,7 +1045,7 @@ if active_raw_file is not None:
             help="Flags any email address whose domain ends in the .in (India) TLD.",
         )
 
-    with st.expander("📊 Output sorting & splitting settings", expanded=True):
+    with st.expander("Output Organization", expanded=True):
         st.caption(
             "Choose how you want the final cleaned data split when downloading. "
             "Splits are generated on-demand in the Download step — check what you need before running the pipeline."
@@ -816,10 +1062,10 @@ if active_raw_file is not None:
             help="Groups the cleaned output by the Industry field and lets you download each industry as a separate file.",
         )
 
-    st.subheader("Step 4 — Run the pipeline")
-    st.caption("This runs all 9 cleaning steps in order and produces a campaign-ready file. Nothing is saved until you click below.")
+    section_header("04", "Run Processing")
+    st.caption("Runs the full cleaning workflow and prepares campaign-ready output.")
 
-    if st.button("Run cleaning pipeline", type="primary"):
+    if st.button("Run Cleaning Pipeline", type="primary"):
         with st.spinner("Processing — running high-performance cleaning pipeline..."):
             progress_bar = st.progress(0, text="Starting cleaning pipeline...")
             TOTAL_STEPS = 9
@@ -1033,7 +1279,7 @@ if active_raw_file is not None:
             gc.collect()
 
     if "cleaned_df" in st.session_state:
-        st.subheader("Step 5 — Review the results")
+        section_header("05", "Review Results")
 
         metrics = st.session_state.get("metrics", {})
         m1, m2, m3, m4 = st.columns(4)
@@ -1046,12 +1292,12 @@ if active_raw_file is not None:
             for line in st.session_state["report"]:
                 st.write("- " + line)
 
-        st.subheader("Final cleaned data (preview)")
+        st.subheader("Final cleaned data preview")
         st.caption("This is what your downloaded file will contain, in final campaign order.")
         st.dataframe(st.session_state["cleaned_df"].head(50), width="stretch")
         st.caption(f"{st.session_state['cleaned_df'].shape[0]:,} rows x {st.session_state['cleaned_df'].shape[1]} columns")
 
-        st.subheader("Step 6 — Download")
+        section_header("06", "Download")
 
         split_by_location = st.session_state.get("split_by_location", True)
         split_by_industry = st.session_state.get("split_by_industry", False)
