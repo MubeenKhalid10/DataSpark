@@ -1254,189 +1254,568 @@ if active_raw_file is not None:
             help="Groups the cleaned output by the Industry field and lets you download each industry as a separate file.",
         )
 
-    section_header("04", "Run Processing")
-    st.caption("Runs the full cleaning workflow and prepares campaign-ready output.")
+section_header("04", "Run Processing")
+st.caption("Runs the full cleaning workflow and prepares campaign-ready output.")
 
-    if st.button("Run Cleaning Pipeline", type="primary"):
-        with st.spinner("Processing — running high-performance cleaning pipeline..."):
-            progress_bar = st.progress(0, text="Starting cleaning pipeline...")
-            TOTAL_STEPS = 9
+if st.button("Run Cleaning Pipeline", type="primary"):
+    with st.spinner("Processing — running high-performance cleaning pipeline..."):
 
-            def update_progress(step_num, message):
-                progress_bar.progress(step_num / TOTAL_STEPS, text=f"Step {step_num}/{TOTAL_STEPS} - {message}")
+        report = []
+        start_count = len(df)
+        report.append(f"Starting rows: {start_count:,}")
 
-            report = []
-            start_count = len(df)
-            report.append(f"Starting rows: {start_count:,}")
+        # ============================================================
+        # STEP 1: Standardize
+        # ============================================================
+        std = pd.DataFrame()
 
-            # ---- STEP 1: Standardize ----
-            update_progress(1, "Standardizing columns...")
-            std = pd.DataFrame()
-            # Split Full Name if First/Last not directly available
-            if "First Name" not in mapping and "Full Name" in mapping:
-                full_series = df[mapping["Full Name"]].astype(str).str.strip()
-                split_names = full_series.str.split(" ", n=1, expand=True)
-                std["First Name"] = split_names[0].fillna("")
-                std["Last Name"] = split_names[1].fillna("") if split_names.shape[1] > 1 else ""
-                del full_series, split_names
+        # Split Full Name if First/Last not directly available
+        if "First Name" not in mapping and "Full Name" in mapping:
+            full_series = df[mapping["Full Name"]].astype(str).str.strip()
+            split_names = full_series.str.split(" ", n=1, expand=True)
 
-            for field in FINAL_COLUMNS:
-                if field in std.columns:
-                    continue
-                if field in mapping:
-                    std[field] = df[mapping[field]].astype(str).str.strip()
-                else:
-                    std[field] = ""
-            report.append(f"Step 1 - Standardized columns. Fields kept: {[c for c in FINAL_COLUMNS if c in mapping or c in std.columns]}")
+            std["First Name"] = split_names[0].fillna("")
 
-            # ---- STEP 2: Remove blank email records ----
-            update_progress(2, "Removing blank emails...")
-            before = len(std)
-            std["Email"] = std["Email"].astype(str).str.strip()
-            std = std[(std["Email"] != "") & (std["Email"].str.lower() != "nan") & (std["Email"].str.lower() != "none")].reset_index(drop=True)
-            report.append(f"Step 2 - Removed blank emails: {before - len(std):,} rows removed")
+            if split_names.shape[1] > 1:
+                std["Last Name"] = split_names[1].fillna("")
+            else:
+                std["Last Name"] = ""
 
-            # ---- STEP 3: Remove Indian contacts ----
-            update_progress(3, "Removing Indian contacts...")
-            before = len(std)
-            indian_mask, matched_reason, matched_value = find_indian_contacts(
-                std, "Location", "Email", check_location, check_domain
+            del full_series, split_names
+
+        for field in FINAL_COLUMNS:
+            if field in std.columns:
+                continue
+
+            if field in mapping:
+                std[field] = df[mapping[field]].astype(str).str.strip()
+            else:
+                std[field] = ""
+
+        report.append(
+            f"Step 1 - Standardized columns. "
+            f"Fields kept: {[c for c in FINAL_COLUMNS if c in mapping or c in std.columns]}"
+        )
+
+        # ============================================================
+        # STEP 2: Remove blank email records
+        # ============================================================
+        before = len(std)
+
+        std["Email"] = std["Email"].astype(str).str.strip()
+
+        std = std[
+            (std["Email"] != "")
+            & (std["Email"].str.lower() != "nan")
+            & (std["Email"].str.lower() != "none")
+        ].reset_index(drop=True)
+
+        report.append(
+            f"Step 2 - Removed blank emails: "
+            f"{before - len(std):,} rows removed"
+        )
+
+        # ============================================================
+        # STEP 3: Remove Indian contacts
+        # ============================================================
+        before = len(std)
+
+        indian_mask, matched_reason, matched_value = find_indian_contacts(
+            std,
+            "Location",
+            "Email",
+            check_location,
+            check_domain
+        )
+
+        removed_indian_df = std[indian_mask].copy()
+
+        removed_indian_df["Matched On"] = matched_reason[indian_mask]
+        removed_indian_df["Matched Value"] = matched_value[indian_mask]
+
+        st.session_state["removed_indian_df"] = removed_indian_df
+
+        std = std[~indian_mask].reset_index(drop=True)
+
+        report.append(
+            f"Step 3 - Removed Indian contacts: "
+            f"{before - len(std):,} rows removed"
+        )
+
+        del indian_mask, matched_reason, matched_value
+        gc.collect()
+
+        # ============================================================
+        # STEP 4: Separate special characters + clean non-email text
+        # ============================================================
+
+        email_special_char_counts = (
+            std["Email"]
+            .astype(str)
+            .str.count(SPECIAL_CHARS_COUNT_PATTERN)
+        )
+
+        total_special_chars_email = int(
+            email_special_char_counts.sum()
+        )
+
+        rows_with_special_chars_email = int(
+            (email_special_char_counts > 0).sum()
+        )
+
+        field_masks = {}
+
+        for col in FINAL_COLUMNS:
+            if col in std.columns:
+                series = std[col]
+            else:
+                series = pd.Series(
+                    [""] * len(std),
+                    index=std.index
+                )
+
+            field_masks[col] = (
+                series
+                .astype(str)
+                .str.contains(
+                    SPECIAL_CHARS_COUNT_PATTERN,
+                    regex=True,
+                    na=False
+                )
             )
-            removed_indian_df = std[indian_mask].copy()
-            removed_indian_df["Matched On"] = matched_reason[indian_mask]
-            removed_indian_df["Matched Value"] = matched_value[indian_mask]
-            st.session_state["removed_indian_df"] = removed_indian_df
-            std = std[~indian_mask].reset_index(drop=True)
-            report.append(f"Step 3 - Removed Indian contacts: {before - len(std):,} rows removed")
-            del indian_mask, matched_reason, matched_value
+
+        any_special_mask = pd.Series(
+            False,
+            index=std.index
+        )
+
+        for col in FINAL_COLUMNS:
+            any_special_mask = (
+                any_special_mask | field_masks[col]
+            )
+
+        email_special_mask = field_masks["Email"]
+
+        # ------------------------------------------------------------
+        # Save rows containing special characters
+        # ------------------------------------------------------------
+        if any_special_mask.any():
+
+            removed_special_df = std[any_special_mask].copy()
+
+            matched_flags = [
+                np.where(
+                    field_masks[col][any_special_mask],
+                    col,
+                    ""
+                )
+                for col in FINAL_COLUMNS
+                if col in field_masks
+            ]
+
+            if matched_flags:
+
+                combined_arr = np.column_stack(
+                    matched_flags
+                )
+
+                removed_special_df["Matched Fields"] = [
+                    ", ".join(
+                        filter(None, row)
+                    )
+                    for row in combined_arr
+                ]
+
+                del combined_arr, matched_flags
+
+            else:
+                removed_special_df["Matched Fields"] = ""
+
+            st.session_state[
+                "special_chars_removed_df"
+            ] = removed_special_df
+
+        else:
+
+            st.session_state[
+                "special_chars_removed_df"
+            ] = pd.DataFrame(
+                columns=FINAL_COLUMNS + ["Matched Fields"]
+            )
+
+        # ------------------------------------------------------------
+        # Save email special-character records separately
+        # ------------------------------------------------------------
+        if email_special_mask.any():
+
+            st.session_state[
+                "special_chars_email_df"
+            ] = std[email_special_mask].copy()
+
+        else:
+
+            st.session_state[
+                "special_chars_email_df"
+            ] = pd.DataFrame(
+                columns=FINAL_COLUMNS
+            )
+
+        # ------------------------------------------------------------
+        # Remove all special-character rows from final dataset
+        # ------------------------------------------------------------
+        before = len(std)
+
+        std = std[
+            ~any_special_mask
+        ].reset_index(drop=True)
+
+        # ------------------------------------------------------------
+        # Clean non-email text fields in remaining rows
+        # ------------------------------------------------------------
+        cleanable_columns = [
+            c
+            for c in FINAL_COLUMNS
+            if c != "Email" and c in std.columns
+        ]
+
+        rows_changed_after_clean = 0
+
+        for col in cleanable_columns:
+
+            has_special = (
+                std[col]
+                .astype(str)
+                .str.contains(
+                    SPECIAL_CHARS_COUNT_PATTERN,
+                    regex=True,
+                    na=False
+                )
+            )
+
+            if has_special.any():
+                rows_changed_after_clean += int(
+                    has_special.sum()
+                )
+
+            std[col] = (
+                std[col]
+                .astype(str)
+                .str.replace(
+                    SPECIAL_CHARS_COUNT_PATTERN,
+                    "",
+                    regex=True
+                )
+                .str.replace(
+                    r"\s+",
+                    " ",
+                    regex=True
+                )
+                .str.strip()
+            )
+
+        report.append(
+            f"Step 4 - Separated special-character rows "
+            f"into audit file: "
+            f"{before - len(std):,} rows removed from final output "
+            f"({rows_with_special_chars_email:,} emails had "
+            f"special characters)"
+        )
+
+        del (
+            any_special_mask,
+            field_masks,
+            email_special_mask,
+            email_special_char_counts
+        )
+
+        gc.collect()
+
+        # ============================================================
+        # STEP 5: Remove duplicates within file by Email
+        # ============================================================
+        before = len(std)
+
+        std["__email_lower"] = (
+            std["Email"]
+            .astype(str)
+            .str.lower()
+            .str.strip()
+        )
+
+        duplicate_count = int(
+            std["__email_lower"].duplicated().sum()
+        )
+
+        std = (
+            std
+            .drop_duplicates(
+                subset="__email_lower",
+                keep="first"
+            )
+            .reset_index(drop=True)
+        )
+
+        report.append(
+            f"Step 5 - Removed in-file duplicates: "
+            f"{duplicate_count:,} duplicate rows removed"
+        )
+
+        # ============================================================
+        # STEP 6: Remove records already in Master File(s)
+        # ============================================================
+        if active_master_files:
+
+            master_emails = set()
+
+            for mf in active_master_files:
+
+                try:
+                    # Keep loading spinner
+                    with st.spinner(
+                        f"Reading Master file {mf.name}..."
+                    ):
+                        mdf = load_file(mf)
+
+                except Exception as e:
+
+                    st.error(
+                        f"Could not read Master file "
+                        f"'{mf.name}': {e}"
+                    )
+
+                    st.info(
+                        "Please make sure the file is a valid "
+                        "CSV, XLSX, XLS, or ZIP/GZ archive."
+                    )
+
+                    st.stop()
+
+                m_mapping = auto_map_columns(mdf)
+
+                m_email_col = m_mapping.get("Email")
+
+                if (
+                    m_email_col
+                    and m_email_col in mdf.columns
+                ):
+
+                    master_emails.update(
+                        mdf[m_email_col]
+                        .dropna()
+                        .astype(str)
+                        .str.strip()
+                        .str.lower()
+                        .unique()
+                    )
+
+                del mdf
+
             gc.collect()
 
-            # ---- STEP 4: Separate special characters + clean non-email text ----
-            update_progress(4, "Separating special-character rows and cleaning text fields...")
-            email_special_char_counts = std["Email"].astype(str).str.count(SPECIAL_CHARS_COUNT_PATTERN)
-            total_special_chars_email = int(email_special_char_counts.sum())
-            rows_with_special_chars_email = int((email_special_char_counts > 0).sum())
-
-            field_masks = {}
-            for col in FINAL_COLUMNS:
-                series = std[col] if col in std.columns else pd.Series([""] * len(std), index=std.index)
-                field_masks[col] = series.astype(str).str.contains(SPECIAL_CHARS_COUNT_PATTERN, regex=True, na=False)
-
-            any_special_mask = pd.Series(False, index=std.index)
-            for col in FINAL_COLUMNS:
-                any_special_mask = any_special_mask | field_masks[col]
-
-            email_special_mask = field_masks["Email"]
-
-            if any_special_mask.any():
-                removed_special_df = std[any_special_mask].copy()
-                matched_flags = [np.where(field_masks[col][any_special_mask], col, "") for col in FINAL_COLUMNS if col in field_masks]
-                if matched_flags:
-                    combined_arr = np.column_stack(matched_flags)
-                    removed_special_df["Matched Fields"] = [", ".join(filter(None, row)) for row in combined_arr]
-                    del combined_arr, matched_flags
-                else:
-                    removed_special_df["Matched Fields"] = ""
-                st.session_state["special_chars_removed_df"] = removed_special_df
-            else:
-                st.session_state["special_chars_removed_df"] = pd.DataFrame(columns=FINAL_COLUMNS + ["Matched Fields"])
-
-            st.session_state["special_chars_email_df"] = std[email_special_mask].copy() if email_special_mask.any() else pd.DataFrame(columns=FINAL_COLUMNS)
-
             before = len(std)
-            std = std[~any_special_mask].reset_index(drop=True)
 
-            # Fast vectorized C-regex cleaning of non-email text in remaining rows
-            cleanable_columns = [c for c in FINAL_COLUMNS if c != "Email" and c in std.columns]
-            rows_changed_after_clean = 0
-            for col in cleanable_columns:
-                has_special = std[col].str.contains(SPECIAL_CHARS_COUNT_PATTERN, regex=True, na=False)
-                if has_special.any():
-                    rows_changed_after_clean += int(has_special.sum())
-                std[col] = std[col].str.replace(SPECIAL_CHARS_COUNT_PATTERN, "", regex=True).str.replace(r"\s+", " ", regex=True).str.strip()
+            std = std[
+                ~std["__email_lower"].isin(
+                    master_emails
+                )
+            ].reset_index(drop=True)
 
             report.append(
-                f"Step 4 - Separated special-character rows into audit file: {before - len(std):,} rows removed from final output "
-                f"({rows_with_special_chars_email:,} emails had special characters)"
-                # f"{total_special_chars_email:,} special characters found in Email field total). "
-                # f"Then cleaned non-email text fields in remaining rows: {rows_changed_after_clean:,} rows cleaned"
+                f"Step 6 - Removed emails already in "
+                f"Master File(s): "
+                f"{before - len(std):,} rows removed"
             )
-            del any_special_mask, field_masks, email_special_mask
-            gc.collect()
 
-            # ---- STEP 5: Remove duplicates within file (by Email) ----
-            update_progress(5, "Removing duplicate emails...")
-            before = len(std)
-            std["__email_lower"] = std["Email"].str.lower()
-            duplicate_count = int(std["__email_lower"].duplicated().sum())
-            std = std.drop_duplicates(subset="__email_lower", keep="first").reset_index(drop=True)
-            report.append(f"Step 5 - Removed in-file duplicates: {duplicate_count:,} duplicate rows removed")
+            del master_emails
 
-            # ---- STEP 6: Remove records already in Master File(s) ----
-            update_progress(6, "Checking against Master File(s)...")
-            if active_master_files:
-                master_emails = set()
-                for mf in active_master_files:
-                    try:
-                        with st.spinner(f"Reading Master file {mf.name}..."):
-                            mdf = load_file(mf)
-                    except Exception as e:
-                        st.error(f"Could not read Master file '{mf.name}': {e}")
-                        st.info("Please make sure the file is a valid CSV, XLSX, XLS, or ZIP/GZ archive.")
-                        st.stop()
-                    m_mapping = auto_map_columns(mdf)
-                    m_email_col = m_mapping.get("Email")
-                    if m_email_col and m_email_col in mdf.columns:
-                        master_emails.update(mdf[m_email_col].dropna().astype(str).str.strip().str.lower().unique())
-                    del mdf
-                gc.collect()
+        else:
+
+            report.append(
+                "Step 6 - No Master File uploaded, "
+                "step skipped"
+            )
+
+        # ============================================================
+        # STEP 7: Remove bounced emails
+        # ============================================================
+        if active_bounce_file is not None:
+
+            try:
+
+                # Keep loading spinner
+                with st.spinner(
+                    f"Reading Bounce file "
+                    f"{active_bounce_file.name}..."
+                ):
+                    bdf = load_file(
+                        active_bounce_file
+                    )
+
+            except Exception as e:
+
+                st.error(
+                    f"Could not read the Bounce file: {e}"
+                )
+
+                st.info(
+                    "Please make sure the file is a valid "
+                    "CSV, XLSX, XLS, or ZIP/GZ archive."
+                )
+
+                st.stop()
+
+            b_mapping = auto_map_columns(bdf)
+
+            b_email_col = b_mapping.get("Email")
+
+            if (
+                b_email_col
+                and b_email_col in bdf.columns
+            ):
+
+                bounce_emails = set(
+                    bdf[b_email_col]
+                    .dropna()
+                    .astype(str)
+                    .str.strip()
+                    .str.lower()
+                    .unique()
+                )
+
                 before = len(std)
-                std = std[~std["__email_lower"].isin(master_emails)].reset_index(drop=True)
-                report.append(f"Step 6 - Removed emails already in Master File(s): {before - len(std):,} rows removed")
+
+                std = std[
+                    ~std["__email_lower"].isin(
+                        bounce_emails
+                    )
+                ].reset_index(drop=True)
+
+                report.append(
+                    f"Step 7 - Removed bounced emails: "
+                    f"{before - len(std):,} rows removed"
+                )
+
+                del bdf, bounce_emails
+
             else:
-                report.append("Step 6 - No Master File uploaded, step skipped")
 
-            # ---- STEP 7: Remove bounced emails ----
-            update_progress(7, "Checking against Master Bounce file...")
-            if active_bounce_file is not None:
-                try:
-                    with st.spinner(f"Reading Bounce file {active_bounce_file.name}..."):
-                        bdf = load_file(active_bounce_file)
-                except Exception as e:
-                    st.error(f"Could not read the Bounce file: {e}")
-                    st.info("Please make sure the file is a valid CSV, XLSX, XLS, or ZIP/GZ archive.")
-                    st.stop()
-                b_mapping = auto_map_columns(bdf)
-                b_email_col = b_mapping.get("Email")
-                if b_email_col and b_email_col in bdf.columns:
-                    bounce_emails = set(bdf[b_email_col].dropna().astype(str).str.strip().str.lower().unique())
-                    before = len(std)
-                    std = std[~std["__email_lower"].isin(bounce_emails)].reset_index(drop=True)
-                    report.append(f"Step 7 - Removed bounced emails: {before - len(std):,} rows removed")
-                    del bdf, bounce_emails
-                else:
-                    report.append("Step 7 - Could not detect Email column in Bounce file, step skipped")
-            else:
-                report.append("Step 7 - No Master Bounce file uploaded, step skipped")
+                report.append(
+                    "Step 7 - Could not detect Email "
+                    "column in Bounce file, step skipped"
+                )
 
-            std = std.drop(columns="__email_lower")
+        else:
 
-            # ---- STEP 8: Arrange final column sequence ----
-            update_progress(8, "Arranging final column order...")
-            std = std[[c for c in FINAL_COLUMNS if c in std.columns]]
+            report.append(
+                "Step 7 - No Master Bounce file uploaded, "
+                "step skipped"
+            )
 
-            # Drop Industry/Location columns entirely if never available and fully empty
-            for optional_col in ["Industry", "Location"]:
-                if optional_col not in mapping and optional_col in std.columns and (std[optional_col] == "").all():
-                    std = std.drop(columns=optional_col)
+        # Remove temporary email column
+        std = std.drop(
+            columns="__email_lower"
+        )
 
-            # ---- STEP 9: Final quality check ----
-            update_progress(9, "Running final quality check...")
-            before = len(std)
-            valid_mask = (std["Email"] != "") & (std.ne("").any(axis=1))
-            std = std[valid_mask].reset_index(drop=True)
-            report.append(f"Step 9 - Final QC pass: removed {before - len(std):,} blank/empty rows")
+        # ============================================================
+        # STEP 8: Arrange final column sequence
+        # ============================================================
+        std = std[
+            [
+                c
+                for c in FINAL_COLUMNS
+                if c in std.columns
+            ]
+        ]
 
+        # Drop Industry/Location columns entirely
+        # if never available and fully empty
+        for optional_col in [
+            "Industry",
+            "Location"
+        ]:
+
+            if (
+                optional_col not in mapping
+                and optional_col in std.columns
+                and (std[optional_col] == "").all()
+            ):
+
+                std = std.drop(
+                    columns=optional_col
+                )
+
+        report.append(
+            "Step 8 - Final column order arranged"
+        )
+
+        # ============================================================
+        # STEP 9: Final quality check
+        # ============================================================
+        before = len(std)
+
+        valid_mask = (
+            (std["Email"] != "")
+            & std.ne("").any(axis=1)
+        )
+
+        std = std[
+            valid_mask
+        ].reset_index(drop=True)
+
+        report.append(
+            f"Step 9 - Final QC pass: "
+            f"removed {before - len(std):,} "
+            f"blank/empty rows"
+        )
+
+        # ============================================================
+        # PROCESSING COMPLETE
+        # ============================================================
+
+        st.session_state["processed_df"] = std
+        st.session_state["processing_report"] = report
+
+        # Optional final success message
+        st.success(
+            f"Cleaning completed successfully! "
+            f"{len(std):,} clean records are ready."
+        )
+
+        # ============================================================
+        # SUMMARY
+        # ============================================================
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.metric(
+                "Starting Rows",
+                f"{start_count:,}"
+            )
+
+        with col2:
+            st.metric(
+                "Final Clean Rows",
+                f"{len(std):,}"
+            )
+
+        with col3:
+            st.metric(
+                "Rows Removed",
+                f"{start_count - len(std):,}"
+            )
+
+        # ============================================================
+        # PROCESSING REPORT
+        # ============================================================
+
+        with st.expander(
+            "View Processing Report",
+            expanded=False
+        ):
+
+            for item in report:
+                st.write(item)
             dup_check = int(std["Email"].str.lower().duplicated().sum())
             blank_email_check = int((std["Email"].astype(str).str.strip() == "").sum())
             report.append(f"Final QC - Duplicate emails remaining: {dup_check:,}")
@@ -1454,8 +1833,6 @@ if active_raw_file is not None:
                     country_series = pd.Series(["Unknown"] * len(std), index=std.index)
             else:
                 country_series = pd.Series(["Unknown"] * len(std), index=std.index)
-
-            progress_bar.progress(1.0, text="Done! Cleaning complete.")
 
             st.session_state["cleaned_df"] = std
             st.session_state["country_series"] = country_series
