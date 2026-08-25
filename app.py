@@ -548,6 +548,11 @@ st.markdown(
         padding-bottom: 0.25rem;
     }
 
+    /* Hide Streamlit's built-in active-tab underline. */
+    [data-testid="stTabs"] [data-baseweb="tab-highlight"] {
+        display: none !important;
+    }
+
     [data-testid="stTabs"] [role="tab"] {
         border: 1.5px solid var(--lf-border);
         border-radius: 10px;
@@ -1351,7 +1356,7 @@ if active_raw_file is not None:
     if "Email" not in mapping:
         st.warning("No Email column is mapped. Every row will be treated as blank-email and removed — double-check your mapping above.")
 
-    with st.expander("🧭 Contact Filtering", expanded=True):
+    with st.expander("🧭 Indian Contact Filtering", expanded=True):
         st.caption(
             "If Step 3 is removing rows that shouldn't be flagged, check which signal is causing it "
             "by toggling these off one at a time and re-running. Every removed row is also available "
@@ -1592,7 +1597,7 @@ if active_raw_file is not None:
         m1.metric("🧹 Duplicate emails removed", f"{metrics.get('duplicates_removed', 0):,}")
         m2.metric("🌏 Indian contacts removed", f"{metrics.get('indian_removed', 0):,}")
         m3.metric("✉️ Emails with special characters", f"{metrics.get('special_char_emails', 0):,}")
-        m4.metric("🔣 Rows w/ special characters", f"{metrics.get('special_char_rows', 0):,}")
+        m4.metric("🔣 Rows containing special characters", f"{metrics.get('special_char_rows', 0):,}")
 
         with st.expander("📋 Processing report (what happened at each step)", expanded=True):
             for line in st.session_state["report"]:
