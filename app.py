@@ -86,12 +86,31 @@ st.markdown('<div class="lf-topbar">', unsafe_allow_html=True)
 render_topbar()
 st.markdown('</div>', unsafe_allow_html=True)
 
+
+SECTION_ICONS = {
+    "Upload": "📤",
+    "Review Data": "🔍",
+    "Configure": "⚙️",
+    "Run Processing": "▶️",
+    "Review Results": "📊",
+    "Download": "⬇️",
+}
+
+
 def section_header(number, title):
+    """Renders a numbered section badge + kicker + heading. Visual only —
+    `number` and `title` are passed through exactly as before by every caller."""
+    icon = SECTION_ICONS.get(title, "")
+    step_no = number.split("-", 1)[0].strip()
+    kicker = number.split("-", 1)[1].strip() if "-" in number else title
     st.markdown(
         f"""
         <div class="lf-section-head">
-            <div class="lf-section-no">{number}</div>
-            <h2>{title}</h2>
+            <div class="lf-section-badge">{step_no}</div>
+            <div class="lf-section-text">
+                <div class="lf-section-kicker">{kicker}</div>
+                <h2>{icon}&nbsp;{title}</h2>
+            </div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -112,35 +131,16 @@ st.markdown(
         --lf-muted: #7f869b;
         --lf-primary: #3c37d6;
         --lf-primary-2: #5a56eb;
+        --lf-primary-soft: #eef0ff;
+        --lf-success: #12875e;
+        --lf-success-soft: #e5f7ef;
+        --lf-danger: #c0362c;
+        --lf-danger-soft: #fdecea;
+        --lf-shadow-sm: 0 1px 2px rgba(22, 26, 45, 0.05);
+        --lf-shadow-md: 0 8px 20px rgba(22, 26, 45, 0.06);
+        --lf-shadow-primary: 0 10px 20px rgba(60, 55, 214, 0.22);
+        --lf-radius: 14px;
     }
-
-     /* How it works button */
-    div.stButton > button[kind="secondary"] {
-        white-space: nowrap !important;
-        min-width: 125px !important;
-        height: 40px !important;
-        border-radius: 10px !important;
-        border: 1px solid #2563eb !important;
-        background: #2563eb !important;
-        color: white !important;
-        font-weight: 600 !important;
-        font-size: 14px !important;
-        padding: 0 18px !important;
-    }
-
-    div.stButton > button[kind="secondary"]:hover {
-        background: #1d4ed8 !important;
-        border-color: #1d4ed8 !important;
-        color: white !important;
-    }
-
-    div.stButton > button[kind="secondary"]:focus {
-        background: #2563eb !important;
-        border-color: #2563eb !important;
-        color: white !important;
-        box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2) !important;
-    }
-
 
     html, body, [class*="css"] {
         font-family: "Manrope", "Segoe UI", sans-serif !important;
@@ -165,10 +165,13 @@ st.markdown(
         -webkit-backdrop-filter: blur(6px);
     }
 
+    /* ---------------------------------------------------------------
+       TOP BAR
+       --------------------------------------------------------------- */
     .lf-topbar {
         padding: 0.2rem 0 1.1rem;
         border-bottom: 1px solid #e7eaf4;
-        margin-bottom: 1.2rem;
+        margin-bottom: 1rem;
     }
 
     .lf-brand-wrap {
@@ -179,7 +182,7 @@ st.markdown(
     }
 
     .lf-brand {
-        font-size: 1.85rem;
+        font-size: 3rem;
         font-weight: 800;
         letter-spacing: -0.03em;
         color: #3340df;
@@ -191,6 +194,54 @@ st.markdown(
         font-weight: 500;
     }
 
+    /* ---------------------------------------------------------------
+       SECTION HEADERS
+       --------------------------------------------------------------- */
+    .lf-section-head {
+        margin-top: 2.4rem;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding-bottom: 0.85rem;
+        border-bottom: 1px solid #e9ecf6;
+    }
+
+    .lf-section-badge {
+        flex-shrink: 0;
+        width: 46px;
+        height: 46px;
+        border-radius: 13px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.15rem;
+        font-weight: 800;
+        color: #ffffff;
+        background: linear-gradient(135deg, var(--lf-primary) 0%, var(--lf-primary-2) 100%);
+        box-shadow: 0 8px 16px rgba(60, 55, 214, 0.25);
+    }
+
+    .lf-section-kicker {
+        text-transform: uppercase;
+        letter-spacing: 0.09em;
+        font-size: 0.72rem;
+        font-weight: 700;
+        color: var(--lf-muted);
+        margin-bottom: 0.15rem;
+    }
+
+    .lf-section-head h2 {
+        margin: 0;
+        color: var(--lf-title);
+        font-size: 1.65rem;
+        line-height: 1.2;
+        letter-spacing: -0.01em;
+    }
+
+    /* ---------------------------------------------------------------
+       CARDS / PANELS / EXPANDERS
+       --------------------------------------------------------------- */
     .lf-inline-panel {
         border: 1px solid #dfe4f2;
         border-radius: 12px;
@@ -204,180 +255,358 @@ st.markdown(
         margin: 0.5rem 0 0.2rem 1rem;
     }
 
-    .st-key-ready_chip_btn button {
-        border-radius: 999px !important;
-        border: 1px solid #d2d9f2 !important;
-        background: #eef1ff !important;
-        color: #2f3ad1 !important;
-        font-size: 0.8rem !important;
-        font-weight: 700 !important;
-        min-height: 2.1rem !important;
-    }
-
-    .lf-section-head {
-        margin-top: 1.6rem;
-        margin-bottom: 0.55rem;
-    }
-
-.lf-section-no {
-    font-size: 2rem;
-    line-height: 2;
-    font-weight: 800;
-    letter-spacing: 0.08em;
-    margin-bottom: 0.4rem;
-
-    background: linear-gradient(
-        135deg,
-        #3c37d6 0%,
-        #5a56eb 100%
-    );
-
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-
-    display: inline-block;
-}
-
-    .lf-section-head h2 {
-        margin: 0;
-        color: var(--lf-title);
-        font-size: 2.2rem;
-        line-height: 1.15;
-        letter-spacing: -0.02em;
+    .upload-card {
+        border: 1px solid var(--lf-border);
+        border-radius: var(--lf-radius);
+        padding: 0.9rem 1.1rem;
+        background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
+        color: var(--lf-body);
+        font-weight: 600;
+        box-shadow: var(--lf-shadow-sm);
+        margin-bottom: 0.9rem;
     }
 
     [data-testid="stExpander"] {
-        border: 1px solid #dfe4f2;
-        border-radius: 14px;
-        background: #fbfcff;
+        border: 1px solid #dfe4f2 !important;
+        border-radius: var(--lf-radius) !important;
+        background: #fbfcff !important;
+        box-shadow: var(--lf-shadow-sm);
+        margin-bottom: 0.75rem;
+        overflow: hidden;
     }
 
-    [data-testid="stExpander"] details summary {
+    [data-testid="stExpander"] summary {
+        font-weight: 700 !important;
+        color: var(--lf-title) !important;
+        padding: 0.7rem 0.9rem !important;
+    }
+
+    [data-testid="stExpander"] summary:hover {
+        color: var(--lf-primary) !important;
+    }
+
+    [data-testid="stVerticalBlockBorderWrapper"] {
+        border-radius: var(--lf-radius) !important;
+    }
+
+    /* ---------------------------------------------------------------
+       FILE UPLOADERS
+       --------------------------------------------------------------- */
+    .lf-upload-label {
         font-weight: 700;
+        font-size: 0.92rem;
+        color: var(--lf-title);
+        margin-bottom: 0.15rem;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+
+    .lf-upload-required {
+        font-size: 0.68rem;
+        font-weight: 700;
+        color: var(--lf-primary);
+        background: var(--lf-primary-soft);
+        border-radius: 999px;
+        padding: 0.08rem 0.5rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+
+    .lf-upload-optional {
+        font-size: 0.68rem;
+        font-weight: 700;
+        color: var(--lf-muted);
+        background: #eef0f5;
+        border-radius: 999px;
+        padding: 0.08rem 0.5rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
     }
 
     [data-testid="stFileUploaderDropzone"] svg {display: none;}
     [data-testid="stFileUploaderDropzone"] {
-        border: 1px dashed #cfd5e6;
-        border-radius: 14px;
+        border: 1px dashed #c7cdea;
+        border-radius: 12px;
         background: #fbfcff;
+        transition: border-color 0.15s ease, background 0.15s ease;
+    }
+    [data-testid="stFileUploaderDropzone"]:hover {
+        border-color: var(--lf-primary);
+        background: #f3f4ff;
     }
     [data-testid="stFileUploaderDropzoneInstructions"] {padding-top: 0.5rem;}
-    [data-testid="stColumn"]:first-child [data-testid="stFileUploaderDropzone"] button[aria-label*="Upload"],
-    [data-testid="stColumn"]:last-child [data-testid="stFileUploaderDropzone"] button[aria-label*="Upload"],
-    [data-testid="stColumn"]:first-child [data-testid="stFileUploaderFile"] button[aria-label*="Add"],
-    [data-testid="stColumn"]:first-child [data-testid="stFileUploaderFile"] button[aria-label*="Upload"],
-    [data-testid="stColumn"]:first-child [data-testid="stFileUploaderFile"] button[title*="Add"],
-    [data-testid="stColumn"]:last-child [data-testid="stFileUploaderFile"] button[aria-label*="Add"],
-    [data-testid="stColumn"]:last-child [data-testid="stFileUploaderFile"] button[aria-label*="Upload"],
-    [data-testid="stColumn"]:last-child [data-testid="stFileUploaderFile"] button[title*="Add"],
-    [data-testid="stColumn"]:first-child button[data-testid*="Add"],
-    [data-testid="stColumn"]:last-child button[data-testid*="Add"],
-    [data-testid="stColumn"]:first-child button[data-testid="stBaseButton-borderlessIcon"],
-    [data-testid="stColumn"]:last-child button[data-testid="stBaseButton-borderlessIcon"] {display: none;}
-    [data-testid="stColumn"] {position: relative;}
-    [data-testid="stColumn"] [class*="st-key-remove_"],
-    [data-testid="stColumn"] .stElementContainer:has([data-testid="stButton"]) {
-        position: absolute;
-        top: 2.5rem;
-        right: 0.55rem;
-        z-index: 20;
-        width: auto !important;
-        height: auto !important;
-        margin: 0 !important;
-        padding: 0 !important;
-    }
-    [data-testid="stColumn"] [class*="st-key-remove_"] button,
-    [data-testid="stColumn"] .stElementContainer:has([data-testid="stButton"]) button {
-        min-width: 1.75rem !important;
-        width: 1.75rem !important;
-        height: 1.75rem !important;
-        padding: 0 !important;
-        border: 0 !important;
-        border-radius: 50% !important;
-        background: transparent !important;
-        color: #4B5563 !important;
-        font-size: 1.15rem !important;
-        line-height: 1 !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        box-shadow: none !important;
-        cursor: pointer;
-        transition: all 0.15s ease-in-out;
-    }
-    [data-testid="stColumn"] [class*="st-key-remove_"] button:hover,
-    [data-testid="stColumn"] .stElementContainer:has([data-testid="stButton"]) button:hover {
-        color: #B42318 !important;
-        background: #FEE4E2 !important;
-    }
-    [data-testid="stColumn"] [class*="st-key-remove_"] button p,
-    [data-testid="stColumn"] .stElementContainer:has([data-testid="stButton"]) button p {
-        margin: 0 !important;
-        padding: 0 !important;
-        font-size: 1.15rem !important;
-        line-height: 1 !important;
-    }
-    .upload-card {
-        border: 1px solid var(--lf-border);
-        border-radius: 14px;
-        padding: 0.75rem 1rem;
+
+    /* Remove-file chip row: normal document flow (no overlay), so it never
+       covers the uploader's own "?" help tooltip. */
+    .lf-file-chip {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        margin-top: 0.4rem;
+        padding: 0.3rem 0.6rem;
         background: #fbfcff;
-        color: var(--lf-body);
+        border: 1px solid var(--lf-border);
+        border-radius: 10px;
     }
 
+    .lf-file-chip-name {
+        font-size: 0.82rem;
+        color: var(--lf-body);
+        font-weight: 600;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+/* ---------------------------------------------------------------
+   FILE REMOVE BUTTON
+   Red square with a text ✕
+   --------------------------------------------------------------- */
+
+[data-testid="stFileUploader"] button[aria-label*="Remove"],
+[data-testid="stFileUploader"] button[title*="Remove"] {
+    position: relative !important;
+
+    min-width: 25px !important;
+    width: 25px !important;
+    height: 25px !important;
+    min-height: 25px !important;
+
+    padding: 0 !important;
+
+    background: #d9534f !important;
+    border: 1px solid #d43f3a !important;
+    border-radius: 4px !important;
+
+    color: transparent !important;
+
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+
+    box-shadow: none !important;
+}
+
+/* Hide Streamlit's SVG */
+[data-testid="stFileUploader"] button[aria-label*="Remove"] svg,
+[data-testid="stFileUploader"] button[title*="Remove"] svg {
+    display: none !important;
+}
+
+/* Create our own ✕ */
+[data-testid="stFileUploader"] button[aria-label*="Remove"]::after,
+[data-testid="stFileUploader"] button[title*="Remove"]::after {
+    content: "✕";
+
+    color: #ffffff !important;
+
+    font-size: 16px !important;
+    font-weight: 700 !important;
+
+    line-height: 1 !important;
+
+    position: absolute !important;
+    top: 50% !important;
+    left: 50% !important;
+
+    transform: translate(-50%, -52%) !important;
+
+    pointer-events: none !important;
+}
+
+/* Hover */
+[data-testid="stFileUploader"] button[aria-label*="Remove"]:hover,
+[data-testid="stFileUploader"] button[title*="Remove"]:hover {
+    background: #c9302c !important;
+    border-color: #ac2925 !important;
+}
+    /* ---------------------------------------------------------------
+       ALERTS / METRICS / TABLES
+       --------------------------------------------------------------- */
     [data-testid="stAlert"] {
         border-radius: 12px;
         border: 1px solid #d7ddef;
+        box-shadow: var(--lf-shadow-sm);
     }
 
     [data-testid="stMetric"] {
         border: 1px solid var(--lf-border);
         border-radius: 12px;
         background: var(--lf-surface);
-        padding: 0.35rem 0.6rem;
+        padding: 0.75rem 0.9rem;
+        box-shadow: var(--lf-shadow-sm);
+        transition: box-shadow 0.15s ease, transform 0.15s ease;
+    }
+
+    [data-testid="stMetric"]:hover {
+        box-shadow: var(--lf-shadow-md);
+        transform: translateY(-1px);
+    }
+
+    [data-testid="stMetricLabel"] {
+        color: var(--lf-muted) !important;
+        font-weight: 600 !important;
+    }
+
+    [data-testid="stMetricValue"] {
+        color: var(--lf-title) !important;
+        font-weight: 800 !important;
     }
 
     [data-testid="stDataFrame"] {
         border: 1px solid #dde3f0;
         border-radius: 12px;
         overflow: hidden;
+        box-shadow: var(--lf-shadow-sm);
     }
 
+    /* ---------------------------------------------------------------
+       BUTTONS  (unified button system)
+       --------------------------------------------------------------- */
     .stButton > button, [data-testid="stDownloadButton"] > button {
-        border-radius: 12px !important;
-        border: 1px solid transparent !important;
+        border-radius: 10px !important;
         font-weight: 700 !important;
-        min-height: 2.5rem;
+        min-height: 2.6rem;
+        font-size: 0.92rem !important;
+        transition: all 0.15s ease-in-out !important;
+        border: 1px solid transparent !important;
     }
 
-    .stButton > button[kind="primary"], [data-testid="stDownloadButton"] > button[kind="primary"] {
+    /* Primary CTAs: Use Selected Files / Run Cleaning Pipeline / Download buttons */
+    .stButton > button[kind="primary"],
+    [data-testid="stDownloadButton"] > button[kind="primary"] {
         background: linear-gradient(135deg, var(--lf-primary), var(--lf-primary-2)) !important;
         color: #ffffff !important;
-        box-shadow: 0 10px 20px rgba(60, 55, 214, 0.22);
+        box-shadow: var(--lf-shadow-primary) !important;
+        border: 1px solid transparent !important;
     }
 
+    .stButton > button[kind="primary"]:hover,
+    [data-testid="stDownloadButton"] > button[kind="primary"]:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 12px 24px rgba(60, 55, 214, 0.30) !important;
+        filter: brightness(1.03);
+    }
+
+    .stButton > button[kind="primary"]:active,
+    [data-testid="stDownloadButton"] > button[kind="primary"]:active {
+        transform: translateY(0);
+    }
+
+    /* Secondary buttons (default kind): outlined, same brand color for consistency */
+    .stButton > button[kind="secondary"],
+    [data-testid="stDownloadButton"] > button[kind="secondary"] {
+        background: #ffffff !important;
+        color: var(--lf-primary) !important;
+        border: 1.5px solid var(--lf-primary) !important;
+        box-shadow: none !important;
+    }
+
+    .stButton > button[kind="secondary"]:hover,
+    [data-testid="stDownloadButton"] > button[kind="secondary"]:hover {
+        background: var(--lf-primary-soft) !important;
+        color: var(--lf-primary) !important;
+        border-color: var(--lf-primary) !important;
+    }
+
+    .stButton > button[kind="secondary"]:focus,
+    [data-testid="stDownloadButton"] > button[kind="secondary"]:focus {
+        box-shadow: 0 0 0 3px var(--lf-primary-soft) !important;
+    }
+
+    /* "How it works" pill in the top bar — explicit box with a visible border,
+       kept compact so it doesn't compete with primary CTAs. */
+    div[data-testid="stButton"] div.st-key-how_it_works_btn button {
+        min-width: 120px !important;
+        height: 40px !important;
+        min-height: 40px !important;
+        padding: 0 16px !important;
+        border-radius: 10px !important;
+        white-space: nowrap !important;
+        background: #ffffff !important;
+        color: var(--lf-primary) !important;
+        border: 1.5px solid var(--lf-primary) !important;
+        box-shadow: var(--lf-shadow-sm) !important;
+    }
+
+    div[data-testid="stButton"] div.st-key-how_it_works_btn button:hover {
+        background: var(--lf-primary-soft) !important;
+        border-color: var(--lf-primary) !important;
+        color: var(--lf-primary) !important;
+    }
+
+    /* ---------------------------------------------------------------
+       TABS  — each tab rendered as its own bordered box, selected tab
+       clearly highlighted with a filled brand background.
+       --------------------------------------------------------------- */
     [data-testid="stTabs"] [role="tablist"] {
         gap: 0.5rem;
+        border-bottom: none;
+        flex-wrap: wrap;
+        padding-bottom: 0.25rem;
     }
 
     [data-testid="stTabs"] [role="tab"] {
-        border-radius: 10px 10px 0 0;
+        border: 1.5px solid var(--lf-border);
+        border-radius: 10px;
+        font-weight: 700;
+        color: var(--lf-muted);
+        padding: 0.6rem 1.1rem;
+        background: #ffffff;
+        transition: all 0.15s ease-in-out;
     }
 
-    [data-testid="stFileUploader"] {
-        border: 1px solid #dce2ef;
-        border-radius: 14px;
-        padding: 0.35rem 0.45rem;
-        background: #ffffff;
+    [data-testid="stTabs"] [role="tab"]:hover {
+        color: var(--lf-primary);
+        border-color: var(--lf-primary);
+        background: var(--lf-primary-soft);
     }
 
-    [data-testid="stFileUploader"] section {
-        background: #ffffff;
+    [data-testid="stTabs"] [aria-selected="true"] {
+        color: #ffffff !important;
+        background: linear-gradient(135deg, var(--lf-primary), var(--lf-primary-2)) !important;
+        border: 1.5px solid var(--lf-primary) !important;
+        box-shadow: var(--lf-shadow-primary);
     }
-    
-    /* Global Loading Overlay & Interaction Blocker */
+
+    /* ---------------------------------------------------------------
+       FORM CONTROLS (radio / checkbox / select)
+       --------------------------------------------------------------- */
+    [data-testid="stRadio"] label,
+    [data-testid="stCheckbox"] label {
+        font-weight: 600 !important;
+        color: var(--lf-body) !important;
+    }
+
+    [data-testid="stRadio"] > div {
+        gap: 0.6rem;
+    }
+
+    div[data-baseweb="radio"] > div:first-child,
+    [data-testid="stCheckbox"] span[data-baseweb="checkbox"] > div:first-child {
+        border-color: #c7cdea !important;
+    }
+
+    div[data-baseweb="radio"] input:checked + div,
+    [data-testid="stCheckbox"] input:checked + span > div:first-child {
+        background-color: var(--lf-primary) !important;
+        border-color: var(--lf-primary) !important;
+    }
+
+    [data-baseweb="select"] > div {
+        border-radius: 10px !important;
+        border-color: var(--lf-border) !important;
+    }
+
+    [data-baseweb="select"] > div:hover {
+        border-color: var(--lf-primary) !important;
+    }
+
+    /* ---------------------------------------------------------------
+       GLOBAL LOADING OVERLAY & INTERACTION BLOCKER
+       --------------------------------------------------------------- */
     @keyframes global-spinner-spin {
         0% { transform: translate(-50%, -50%) rotate(0deg); }
         100% { transform: translate(-50%, -50%) rotate(360deg); }
@@ -407,8 +636,8 @@ st.markdown(
         width: 58px;
         height: 58px;
         border: 4px solid rgba(255, 255, 255, 0.2);
-        border-top: 4px solid #3B82F6;
-        border-right: 4px solid #60A5FA;
+        border-top: 4px solid var(--lf-primary);
+        border-right: 4px solid var(--lf-primary-2);
         border-radius: 50%;
         z-index: 999999;
         animation: global-spinner-spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
@@ -449,106 +678,12 @@ st.markdown(
             align-items: flex-start;
         }
         .lf-section-head h2 {
-            font-size: 1.7rem;
+            font-size: 1.4rem;
         }
         [data-testid="stAppViewContainer"] [data-testid="stMainBlockContainer"] {
             padding-top: 4.75rem;
         }
     }
-      /* Special Characters Download Button */
-    div[data-testid="stDownloadButton"] button[kind="secondary"] {
-        background: linear-gradient(135deg, var(--lf-primary), var(--lf-primary-2)) !important;
-                color: #ffffff !important;
-                box-shadow: 0 10px 20px rgba(60, 55, 214, 0.22);
-        border-radius: 8px !important;
-        font-weight: 600 !important;
-    }
-
-    div[data-testid="stDownloadButton"] button[kind="secondary"]:hover {
-      background: linear-gradient(135deg, var(--lf-primary), var(--lf-primary-2)) !important;
-              color: #ffffff !important;
-              box-shadow: 0 10px 20px rgba(60, 55, 214, 0.22);
-    }
-    /* =========================================================
-   LEADFLOW - HOW IT WORKS BUTTON
-   ========================================================= */
-
-div[data-testid="stButton"] div.st-key-how_it_works_btn button {
-    width: 200% !important;
-    min-width: 130px !important;
-    height: 42px !important;
-    min-height: 42px !important;
-
-    padding: 0 18px !important;
-
-    border-radius: 12px !important;
-    border: 1px solid #3c37d6 !important;
-
-    background: #3c37d6 !important;
-    background-image: linear-gradient(
-        135deg,
-        #3c37d6 0%,
-        #5a56eb 100%
-    ) !important;
-
-    color: #ffffff !important;
-
-    font-family: "Manrope", "Segoe UI", sans-serif !important;
-    font-size: 0.84rem !important;
-    font-weight: 700 !important;
-
-    white-space: nowrap !important;
-
-    box-shadow: 0 8px 18px rgba(60, 55, 214, 0.22) !important;
-
-    transition: all 0.2s ease !important;
-}
-
-
-/* Text inside the button */
-div[data-testid="stButton"] div.st-key-how_it_works_btn button p,
-div[data-testid="stButton"] div.st-key-how_it_works_btn button span {
-    color: #ffffff !important;
-    font-weight: 700 !important;
-    white-space: nowrap !important;
-}
-
-
-/* Hover */
-div[data-testid="stButton"] div.st-key-how_it_works_btn button:hover {
-    background: #302bc0 !important;
-    background-image: linear-gradient(
-        135deg,
-        #302bc0 0%,
-        #4b46d8 100%
-    ) !important;
-
-    border-color: #302bc0 !important;
-    color: #ffffff !important;
-
-    transform: translateY(-1px);
-
-    box-shadow: 0 10px 22px rgba(60, 55, 214, 0.30) !important;
-}
-
-
-/* Focus */
-div[data-testid="stButton"] div.st-key-how_it_works_btn button:focus,
-div[data-testid="stButton"] div.st-key-how_it_works_btn button:focus-visible {
-    background: #3c37d6 !important;
-    background-image: linear-gradient(
-        135deg,
-        #3c37d6 0%,
-        #5a56eb 100%
-    ) !important;
-
-    border-color: #3c37d6 !important;
-    color: #ffffff !important;
-
-    box-shadow:
-        0 0 0 3px rgba(60, 55, 214, 0.18),
-        0 8px 18px rgba(60, 55, 214, 0.22) !important;
-}
     </style>
     """,
     unsafe_allow_html=True,
@@ -1060,9 +1195,13 @@ def get_email_series(df, mapping):
 
 # ---------------- FILE UPLOADS ----------------
 section_header("01-Upload the Files", "Upload")
-st.markdown('<div class="upload-card">Drag and drop your campaign sources, then click "Use Selected Files".</div>', unsafe_allow_html=True)
+st.markdown(
+    '<div class="upload-card">📁 Drag and drop your campaign sources below, then click '
+    '<strong>&quot;Use Selected Files&quot;</strong> to continue.</div>',
+    unsafe_allow_html=True,
+)
 
-with st.expander("Large-file upload tip", expanded=False):
+with st.expander("💡 Large-file upload tip", expanded=False):
     st.info(
         "💡 **Important for 500k+ Rows on Cloud:**\n\n"
         "Cloud hosts (Streamlit Cloud) enforce a **60–90 second network timeout** per upload request. "
@@ -1075,57 +1214,63 @@ for uploader_name in ["raw", "master", "bounce"]:
     st.session_state.setdefault(f"{uploader_name}_uploader_version", 0)
 
 col1, col2, col3 = st.columns(3)
+
 with col1:
-    st.caption("Raw Lead File (Required)")
+    st.markdown(
+        '<div class="lf-upload-label">📄 Raw Lead File '
+        '<span class="lf-upload-required">Required</span></div>',
+        unsafe_allow_html=True,
+    )
+
     raw_file_selected = st.file_uploader(
         "Drag and drop CSV/XLSX",
         type=["csv", "xlsx", "xls", "zip", "gz"],
         key=f"raw_{st.session_state['raw_uploader_version']}",
         help="The messy export you want cleaned — from a scraper, CRM, or list purchase. Supports CSV, XLSX, XLS, ZIP, or GZ.",
     )
-    if raw_file_selected is not None and st.button("✕", key="remove_raw_file", help="Remove selected raw file"):
-        st.session_state["active_raw_file"] = None
-        for k in list(st.session_state.keys()):
-            if k.startswith("_df_cache_"):
-                del st.session_state[k]
-        gc.collect()
-        st.session_state["raw_uploader_version"] += 1
-        st.rerun()
+
+
 with col2:
-    st.caption("Master Files")
-    master_files_selected = st.file_uploader(
+    st.markdown(
+        '<div class="lf-upload-label">🗂️ Master Files '
+        '<span class="lf-upload-optional">Optional</span></div>',
+        unsafe_allow_html=True,
+    )
+
+    master_files_uploaded = st.file_uploader(
         "Exclude leads you already have",
         type=["csv", "xlsx", "xls", "zip", "gz"],
         accept_multiple_files=True,
         key=f"master_{st.session_state['master_uploader_version']}",
         help="Upload up to three past campaign contact files. Anyone whose email matches will be removed so you don't re-contact them.",
     )
-    if master_files_selected and st.button("✕", key="remove_master_files", help="Remove all selected Master files"):
-        st.session_state["active_master_files"] = []
-        for k in list(st.session_state.keys()):
-            if k.startswith("_df_cache_"):
-                del st.session_state[k]
-        gc.collect()
-        st.session_state["master_uploader_version"] += 1
-        st.rerun()
+
+    st.session_state.setdefault("excluded_master_files", set())
+
+    master_files_selected = []
+
+    for mf in (master_files_uploaded or []):
+        if mf.name in st.session_state["excluded_master_files"]:
+            continue
+
+        master_files_selected.append(mf)
+
+
 with col3:
-    st.caption("Bounce File")
+    st.markdown(
+        '<div class="lf-upload-label">🚫 Bounce File '
+        '<span class="lf-upload-optional">Optional</span></div>',
+        unsafe_allow_html=True,
+    )
+
     bounce_file_selected = st.file_uploader(
         "Previously bounced emails",
         type=["csv", "xlsx", "xls", "zip", "gz"],
         key=f"bounce_{st.session_state['bounce_uploader_version']}",
         help="Emails that have previously bounced. Any matching address will be removed to protect your sender reputation.",
     )
-    if bounce_file_selected is not None and st.button("✕", key="remove_bounce_file", help="Remove selected bounce file"):
-        st.session_state["active_bounce_file"] = None
-        for k in list(st.session_state.keys()):
-            if k.startswith("_df_cache_"):
-                del st.session_state[k]
-        gc.collect()
-        st.session_state["bounce_uploader_version"] += 1
-        st.rerun()
 
-if st.button("Use Selected Files", type="primary"):
+if st.button("📤  Use Selected Files", type="primary"):
     selected_files = ([raw_file_selected] if raw_file_selected is not None else []) + list(master_files_selected) + (
         [bounce_file_selected] if bounce_file_selected is not None else []
     )
@@ -1157,21 +1302,6 @@ for selected_file in ([active_raw_file] if active_raw_file is not None else []) 
         st.error(upload_error)
         st.stop()
 
-status_col1, status_col2, status_col3 = st.columns(3)
-with status_col1:
-    raw_status_file = active_raw_file or raw_file_selected
-    if raw_status_file is not None:
-        st.success(f"Using raw file: {raw_status_file.name}")
-with status_col2:
-    if active_master_files:
-        st.caption("Using master files: " + ", ".join(f.name for f in active_master_files))
-    elif master_files_selected:
-        st.caption(f"{len(master_files_selected)} Master file(s) selected")
-with status_col3:
-    bounce_status_file = active_bounce_file or bounce_file_selected
-    if bounce_status_file is not None:
-        st.caption(f"Using bounce file: {bounce_status_file.name}")
-
 if active_raw_file is not None:
     try:
         with st.spinner("Loading raw lead file..."):
@@ -1186,7 +1316,7 @@ if active_raw_file is not None:
     summary_cols[0].metric("Rows", f"{df.shape[0]:,}")
     summary_cols[1].metric("Columns", f"{df.shape[1]:,}")
 
-    st.caption("Quick preview of detected data before mapping and processing.")
+    st.caption("🔍 Quick preview of detected data before mapping and processing.")
     st.dataframe(df.head(10), width="stretch")
     st.caption(f"{df.shape[0]:,} rows x {df.shape[1]} columns.")
 
@@ -1221,7 +1351,7 @@ if active_raw_file is not None:
     if "Email" not in mapping:
         st.warning("No Email column is mapped. Every row will be treated as blank-email and removed — double-check your mapping above.")
 
-    with st.expander("Contact Filtering", expanded=True):
+    with st.expander("🧭 Contact Filtering", expanded=True):
         st.caption(
             "If Step 3 is removing rows that shouldn't be flagged, check which signal is causing it "
             "by toggling these off one at a time and re-running. Every removed row is also available "
@@ -1237,7 +1367,7 @@ if active_raw_file is not None:
             help="Flags any email address whose domain ends in the .in (India) TLD.",
         )
 
-    with st.expander("Output Organization", expanded=True):
+    with st.expander("🗃️ Output Organization", expanded=True):
         st.caption(
             "Choose how you want the final cleaned data split when downloading. "
             "Splits are generated on-demand in the Download step — check what you need before running the pipeline."
@@ -1255,9 +1385,9 @@ if active_raw_file is not None:
         )
 
     section_header("04-Process The Data Files", "Run Processing")
-    st.caption("Runs the full cleaning workflow and prepares campaign-ready output.")
+    st.caption("▶️ Runs the full cleaning workflow and prepares campaign-ready output.")
 
-    if st.button("Run Cleaning Pipeline", type="primary"):
+    if st.button("▶️  Run Cleaning Pipeline", type="primary"):
         with st.spinner("Processing — running high-performance cleaning pipeline..."):
             
             report = []
@@ -1459,16 +1589,16 @@ if active_raw_file is not None:
 
         metrics = st.session_state.get("metrics", {})
         m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Duplicate emails removed", f"{metrics.get('duplicates_removed', 0):,}")
-        m2.metric("Indian contacts removed", f"{metrics.get('indian_removed', 0):,}")
-        m3.metric("Emails with special characters", f"{metrics.get('special_char_emails', 0):,}")
-        m4.metric("Rows separated due to special characters", f"{metrics.get('special_char_rows', 0):,}")
+        m1.metric("🧹 Duplicate emails removed", f"{metrics.get('duplicates_removed', 0):,}")
+        m2.metric("🌏 Indian contacts removed", f"{metrics.get('indian_removed', 0):,}")
+        m3.metric("✉️ Emails with special characters", f"{metrics.get('special_char_emails', 0):,}")
+        m4.metric("🔣 Rows w/ special characters", f"{metrics.get('special_char_rows', 0):,}")
 
-        with st.expander("Processing report (what happened at each step)", expanded=True):
+        with st.expander("📋 Processing report (what happened at each step)", expanded=True):
             for line in st.session_state["report"]:
                 st.write("- " + line)
 
-        st.subheader("Final cleaned data preview")
+        st.subheader("✅ Final cleaned data preview")
         st.caption("This is what your downloaded file will contain, in final campaign order.")
         st.dataframe(st.session_state["cleaned_df"].head(50), width="stretch")
         st.caption(f"{st.session_state['cleaned_df'].shape[0]:,} rows x {st.session_state['cleaned_df'].shape[1]} columns")
@@ -1478,12 +1608,12 @@ if active_raw_file is not None:
         split_by_location = st.session_state.get("split_by_location", True)
         split_by_industry = st.session_state.get("split_by_industry", False)
 
-        tabs_to_show = ["Final campaign file"]
+        tabs_to_show = ["📄 Final campaign file"]
         if split_by_location:
-            tabs_to_show.append("Split by country")
+            tabs_to_show.append("🌍 Split by country")
         if split_by_industry:
-            tabs_to_show.append("Split by industry")
-        tabs_to_show.append("Audit files (removed rows)")
+            tabs_to_show.append("🏭 Split by industry")
+        tabs_to_show.append("🧾 Audit files (removed rows)")
 
         all_tabs = st.tabs(tabs_to_show)
         tab_idx = 0
