@@ -516,6 +516,8 @@ st.markdown(
         box-shadow: 0 0 0 3px var(--lf-primary-soft) !important;
     }
 
+    
+
     /* "How it works" pill in the top bar — explicit box with a visible border,
        kept compact so it doesn't compete with primary CTAs. */
     div[data-testid="stButton"] div.st-key-how_it_works_btn button {
@@ -1784,11 +1786,12 @@ if active_raw_file is not None:
             if len(removed_indian_df) > 0:
                 st.dataframe(removed_indian_df.head(20), width="stretch")
                 st.download_button(
-                    "Download removed Indian contacts (full list)",
+                    "⬇️ Download removed Indian contacts (full list)",
                     data=removed_indian_df.to_csv(index=False).encode("utf-8"),
                     file_name="removed_indian_contacts.csv",
                     mime="text/csv",
                     key="dl_indian_audit",
+                    type="primary",
                 )
                 st.caption("Check the 'Matched On' and 'Matched Value' columns to see exactly what triggered each removal.")
 
@@ -1804,6 +1807,7 @@ if active_raw_file is not None:
                     file_name="special_characters_separated_uncleaned.csv",
                     mime="text/csv",
                     key="dl_specialchars_audit",
+                    type="primary",
                 )
                 st.caption("This file is not cleaned. It contains original rows exactly as detected with special characters.")
 
@@ -1830,6 +1834,7 @@ if active_raw_file is not None:
                     file_name="special_characters_separated_cleaned.csv",
                     mime="text/csv",
                     key="dl_specialchars_cleaned_audit",
+                    type="primary",
                 )
                 st.caption("Email column is preserved as-is. Only non-email fields have had special characters stripped.")
 
@@ -1845,6 +1850,7 @@ if active_raw_file is not None:
                     file_name="email_special_characters_separated.csv",
                     mime="text/csv",
                     key="dl_email_specialchars_audit",
+                    type="primary",
                 )
 else:
     st.info("Select files above, click 'Use selected files', then continue. Master File and Bounce File are optional but recommended for cleaner results.")
